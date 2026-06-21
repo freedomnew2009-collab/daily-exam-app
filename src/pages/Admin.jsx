@@ -10,6 +10,7 @@ function blankQuestion() {
   return {
     question_text: '',
     image_url: '',
+    category: '',
     choices: LETTERS.map((k) => ({ key: k, text: '' })),
     correct_choice: 'A',
     explanation: '',
@@ -72,7 +73,7 @@ function AdminLogin() {
   )
 }
 
-function QuestionEditor({ q, index, onChange, onRemove }) {
+function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
   const [uploading, setUploading] = useState(false)
   const [imgErr, setImgErr] = useState('')
   const setField = (patch) => onChange({ ...q, ...patch })
@@ -126,6 +127,26 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
         placeholder="โจทย์คำถาม…"
         className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
       />
+
+      {/* หมวดของข้อนี้ (เลือกจากที่ตั้งไว้) */}
+      <div className="flex items-center gap-2">
+        <span className="flex-shrink-0 text-xs font-medium text-slate-500">🏷️ หมวด</span>
+        <select
+          value={q.category || ''}
+          onChange={(e) => setField({ category: e.target.value })}
+          className="min-w-0 flex-1 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+        >
+          <option value="">— ไม่ระบุหมวด —</option>
+          {q.category && !categories.includes(q.category) && (
+            <option value={q.category}>{q.category}</option>
+          )}
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* รูปประกอบคำถาม (ไม่บังคับ) */}
       {q.image_url ? (
@@ -249,6 +270,112 @@ function EncourageSetting() {
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={save} disabled={saving} className="px-4 py-2 text-sm">
           {saving ? 'กำลังบันทึก…' : '💾 บันทึกข้อความ'}
+        </Button>
+        {msg && (
+          <span className={`text-xs font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+// จัดการรายการหมวด (เก็บใน app_settings key='categories')
+function CategorySetting({ onSaved }) {
+  const [list, setList] = useState([])
+  const [newCat, setNewCat] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'categories')
+        .maybeSingle()
+      let arr
+      try {
+        arr = data?.value ? JSON.parse(data.value) : []
+      } catch {
+        arr = []
+      }
+      setList(Array.isArray(arr) ? arr : [])
+      setLoading(false)
+    })()
+  }, [])
+
+  const add = () => {
+    const v = newCat.trim()
+    setNewCat('')
+    if (!v || list.includes(v)) return
+    setList((l) => [...l, v])
+  }
+  const remove = (c) => setList((l) => l.filter((x) => x !== c))
+
+  const save = async () => {
+    setSaving(true)
+    setMsg('')
+    const clean = [...new Set(list.map((s) => s.trim()).filter(Boolean))]
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'categories', value: JSON.stringify(clean), updated_at: new Date().toISOString() })
+    setSaving(false)
+    if (error) {
+      setMsg('❌ ' + error.message)
+      return
+    }
+    setList(clean)
+    setMsg('✅ บันทึกแล้ว')
+    onSaved?.(clean)
+  }
+
+  if (loading)
+    return (
+      <Card>
+        <Spinner label="กำลังโหลด…" />
+      </Card>
+    )
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs text-slate-500">
+        ตั้งหมวดไว้ล่วงหน้า เวลาเพิ่มข้อสอบแต่ละข้อจะมีให้เลือกจาก dropdown — อย่าลืมกดบันทึก
+      </p>
+      {list.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {list.map((c) => (
+            <span
+              key={c}
+              className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-700"
+            >
+              {c}
+              <button onClick={() => remove(c)} className="text-violet-400 hover:text-rose-500" title="ลบหมวด">
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-400">ยังไม่มีหมวด</p>
+      )}
+      <div className="flex gap-2">
+        <input
+          value={newCat}
+          onChange={(e) => setNewCat(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+          placeholder="เพิ่มหมวดใหม่ เช่น คณิตศาสตร์"
+          className="min-w-0 flex-1 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-violet-400"
+        />
+        <Button variant="ghost" onClick={add} className="px-4 py-2 text-sm">
+          เพิ่ม
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <Button onClick={save} disabled={saving} className="px-4 py-2 text-sm">
+          {saving ? 'กำลังบันทึก…' : '💾 บันทึกหมวด'}
         </Button>
         {msg && (
           <span className={`text-xs font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
@@ -884,6 +1011,7 @@ function ArticlesAdmin() {
 // รายการเมนูในแถบด้านข้างของหน้าแอดมิน (เลื่อนไปยังแต่ละส่วน)
 const ADMIN_SECTIONS = [
   { id: 'sec-add', label: '➕ เพิ่มข้อสอบ' },
+  { id: 'sec-categories', label: '🏷️ หมวดข้อสอบ' },
   { id: 'sec-time', label: '⏱ เวลาทำข้อสอบ' },
   { id: 'sec-encourage', label: '💛 ข้อความให้กำลังใจ' },
   { id: 'sec-score', label: '🎯 ข้อความตามคะแนน' },
@@ -923,7 +1051,7 @@ export default function Admin() {
   const [targetSetId, setTargetSetId] = useState('') // '' = สร้างชุดใหม่, ไม่งั้น = id ชุดเดิม
   const [dayNumber, setDayNumber] = useState(1)
   const [title, setTitle] = useState('')
-  const [category, setCategory] = useState('')
+  const [categoryList, setCategoryList] = useState([]) // หมวดที่ตั้งไว้ (สำหรับ dropdown)
   const [publish, setPublish] = useState(true)
   const [questions, setQuestions] = useState(() =>
     Array.from({ length: 5 }, blankQuestion)
@@ -945,24 +1073,33 @@ export default function Admin() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: setsData }, { count }, { data: usersData }] = await Promise.all([
-      supabase
-        .from('exam_sets')
-        .select('id, day_number, title, category, published, question_count, created_at')
-        .order('day_number', { ascending: true }),
-      supabase
-        .from('qa_threads')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_public', false),
-      supabase
-        .from('profiles')
-        .select('id, username, suspended, created_at')
-        .order('created_at', { ascending: true }),
-    ])
+    const [{ data: setsData }, { count }, { data: usersData }, { data: catSetting }] =
+      await Promise.all([
+        supabase
+          .from('exam_sets')
+          .select('id, day_number, title, published, question_count, created_at')
+          .order('day_number', { ascending: true }),
+        supabase
+          .from('qa_threads')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_public', false),
+        supabase
+          .from('profiles')
+          .select('id, username, suspended, created_at')
+          .order('created_at', { ascending: true }),
+        supabase.from('app_settings').select('value').eq('key', 'categories').maybeSingle(),
+      ])
     setSets(setsData || [])
     setPrivateCount(count || 0)
     setUsers(usersData || [])
     setDayNumber(((setsData || []).reduce((m, s) => Math.max(m, s.day_number), 0) || 0) + 1)
+    let cats
+    try {
+      cats = catSetting?.value ? JSON.parse(catSetting.value) : []
+    } catch {
+      cats = []
+    }
+    setCategoryList(Array.isArray(cats) ? cats : [])
     setLoading(false)
   }, [])
 
@@ -1009,6 +1146,7 @@ export default function Admin() {
       const payload = questions.map((q) => ({
         question_text: q.question_text.trim(),
         image_url: q.image_url || '',
+        category: (q.category || '').trim(),
         choices: q.choices.filter((c) => c.text.trim()),
         correct_choice: q.correct_choice,
         explanation: q.explanation.trim(),
@@ -1020,7 +1158,6 @@ export default function Admin() {
           p_title: title.trim() || `ชุดข้อสอบวันที่ ${dayNumber}`,
           p_published: publish,
           p_questions: payload,
-          p_category: category.trim(),
         })
         if (error) throw error
         setMsg('✅ บันทึกชุดข้อสอบใหม่เรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
@@ -1057,13 +1194,6 @@ export default function Admin() {
   const removeSet = async (s) => {
     if (!confirm(`ลบชุด "วันที่ ${s.day_number}" และคำถามทั้งหมด?`)) return
     await supabase.from('exam_sets').delete().eq('id', s.id)
-    load()
-  }
-
-  const editCategory = async (s) => {
-    const v = prompt(`หมวดของ "วันที่ ${s.day_number} · ${s.title || ''}"`, s.category || '')
-    if (v === null) return // กดยกเลิก
-    await supabase.from('exam_sets').update({ category: v.trim() || null }).eq('id', s.id)
     load()
   }
 
@@ -1123,6 +1253,12 @@ export default function Admin() {
           <Badge color={privateCount ? 'red' : 'slate'}>{privateCount}</Badge>
         </Card>
       </Link>
+
+      {/* หมวดข้อสอบ */}
+      <h2 id="sec-categories" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">🏷️ หมวดข้อสอบ</h2>
+      <div className="mb-4">
+        <CategorySetting onSaved={setCategoryList} />
+      </div>
 
       {/* เวลาทำข้อสอบ */}
       <h2 id="sec-time" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">⏱ เวลาทำข้อสอบ (นับถอยหลัง)</h2>
@@ -1200,23 +1336,6 @@ export default function Admin() {
                 />
               </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500">
-                หมวด (สำหรับจัดกลุ่มในคลังข้อสอบ)
-              </label>
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                list="category-list"
-                placeholder="เช่น คณิตศาสตร์, กายวิภาค, ทั่วไป…"
-                className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
-              />
-              <datalist id="category-list">
-                {[...new Set(sets.map((s) => s.category).filter(Boolean))].map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
-            </div>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
               <input
                 type="checkbox"
@@ -1241,6 +1360,7 @@ export default function Admin() {
             key={i}
             q={q}
             index={i}
+            categories={categoryList}
             onChange={(val) => updateQ(i, val)}
             onRemove={() => removeQ(i)}
           />
@@ -1284,16 +1404,13 @@ export default function Admin() {
                 <p className="truncate font-bold text-slate-800">
                   วันที่ {s.day_number} · {s.title}
                 </p>
-                <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
-                  {s.category && <Badge color="indigo">{s.category}</Badge>}
-                  <span>
-                    {s.question_count} ข้อ ·{' '}
-                    {s.published ? (
-                      <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
-                    ) : (
-                      <span className="font-semibold text-amber-600">ฉบับร่าง</span>
-                    )}
-                  </span>
+                <p className="text-xs text-slate-400">
+                  {s.question_count} ข้อ ·{' '}
+                  {s.published ? (
+                    <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
+                  ) : (
+                    <span className="font-semibold text-amber-600">ฉบับร่าง</span>
+                  )}
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">
@@ -1303,13 +1420,6 @@ export default function Admin() {
                   title="เพิ่มคำถามเข้าชุดนี้"
                 >
                   + เพิ่มข้อ
-                </button>
-                <button
-                  onClick={() => editCategory(s)}
-                  className="rounded-lg bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-200"
-                  title="ตั้ง/แก้หมวดของชุดนี้"
-                >
-                  🏷️ หมวด
                 </button>
                 <button
                   onClick={() => togglePublish(s)}

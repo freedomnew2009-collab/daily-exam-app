@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Spinner, Button, Empty, formatDuration } from '../components/ui'
+import { Spinner, Button, Empty, Badge, formatDuration } from '../components/ui'
 
 export default function Quiz() {
   const { setId } = useParams()
@@ -29,7 +29,7 @@ export default function Quiz() {
         supabase.from('exam_sets').select('id, day_number, title').eq('id', setId).single(),
         supabase
           .from('questions')
-          .select('id, order_index, question_text, image_url, choices')
+          .select('id, order_index, question_text, image_url, category, choices')
           .eq('exam_set_id', setId)
           .order('order_index', { ascending: true }),
         supabase.from('app_settings').select('value').eq('key', 'quiz_minutes').maybeSingle(),
@@ -158,7 +158,10 @@ export default function Quiz() {
 
       {/* คำถาม */}
       <div key={q.id} className="animate-pop flex-1">
-        <p className="text-xs font-semibold text-violet-500">วันที่ {examSet?.day_number}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-semibold text-violet-500">วันที่ {examSet?.day_number}</p>
+          {q.category && <Badge color="indigo">🏷️ {q.category}</Badge>}
+        </div>
         <h2 className="mb-3 mt-1 text-lg font-bold leading-relaxed text-slate-800">
           {q.question_text}
         </h2>

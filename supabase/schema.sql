@@ -43,11 +43,13 @@ create table if not exists questions (
   order_index int not null default 0,
   question_text text not null,
   image_url text, -- รูปประกอบคำถาม (ไม่บังคับ)
+  category text,  -- หมวดของคำถามแต่ละข้อ (ไม่บังคับ)
   choices jsonb not null default '[]'::jsonb, -- [{key,text}]
   created_at timestamptz not null default now()
 );
 -- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
 alter table questions add column if not exists image_url text;
+alter table questions add column if not exists category text;
 
 -- เฉลย (แยกตาราง — อ่านได้เฉพาะแอดมิน / ผ่าน RPC หลังทำเสร็จ)
 create table if not exists question_keys (
@@ -241,9 +243,9 @@ begin
   returning id into v_set_id;
 
   for rec in select * from jsonb_array_elements(p_questions) loop
-    insert into questions(exam_set_id, order_index, question_text, choices, image_url)
+    insert into questions(exam_set_id, order_index, question_text, choices, image_url, category)
     values (v_set_id, v_idx, rec->>'question_text', rec->'choices',
-            nullif(rec->>'image_url', ''))
+            nullif(rec->>'image_url', ''), nullif(btrim(rec->>'category'), ''))
     returning id into v_q_id;
 
     insert into question_keys(question_id, correct_choice, explanation)
@@ -272,9 +274,9 @@ begin
   select coalesce(max(order_index), -1) + 1 into v_idx
     from questions where exam_set_id = p_exam_set_id;
 
-  insert into questions(exam_set_id, order_index, question_text, choices, image_url)
+  insert into questions(exam_set_id, order_index, question_text, choices, image_url, category)
   values (p_exam_set_id, v_idx, p_question->>'question_text', p_question->'choices',
-          nullif(p_question->>'image_url', ''))
+          nullif(p_question->>'image_url', ''), nullif(btrim(p_question->>'category'), ''))
   returning id into v_q_id;
 
   insert into question_keys(question_id, correct_choice, explanation)
@@ -349,6 +351,7 @@ begin
       'question_id', q.id,
       'question_text', q.question_text,
       'image_url', q.image_url,
+      'category', q.category,
       'choices', q.choices,
       'correct_choice', k.correct_choice,
       'explanation', k.explanation,

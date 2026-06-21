@@ -121,8 +121,11 @@ export default function Review() {
                 correct ? 'border-emerald-200' : 'border-rose-200'
               }`}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">ข้อ {i + 1}</span>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                  ข้อ {i + 1}
+                  {it.category && <Badge color="indigo">🏷️ {it.category}</Badge>}
+                </span>
                 {correct ? <Badge color="green">✅ ตอบถูก</Badge> : <Badge color="red">❌ ตอบผิด</Badge>}
               </div>
               <p className="mb-3 font-bold leading-relaxed text-slate-800">{it.question_text}</p>

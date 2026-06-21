@@ -12,6 +12,7 @@ export default function Library() {
   const [loading, setLoading] = useState(true)
   const [sets, setSets] = useState([])
   const [attempts, setAttempts] = useState({})
+  const [catBySet, setCatBySet] = useState({}) // setId -> [หมวดที่มีในชุดนั้น]
   const [collapsed, setCollapsed] = useState({}) // category -> ซ่อนอยู่ไหม
 
   const logoutAll = async () => {
@@ -25,10 +26,10 @@ export default function Library() {
       return
     }
     setLoading(true)
-    const [{ data: setsData }, { data: attemptData }] = await Promise.all([
+    const [{ data: setsData }, { data: attemptData }, { data: qData }] = await Promise.all([
       supabase
         .from('exam_sets')
-        .select('id, day_number, title, category, created_at, question_count')
+        .select('id, day_number, title, created_at, question_count')
         .eq('published', true)
         .order('day_number', { ascending: true }),
       supabase
@@ -36,6 +37,7 @@ export default function Library() {
         .select('exam_set_id, score, total, completed')
         .eq('user_id', user.id)
         .eq('completed', true),
+      supabase.from('questions').select('exam_set_id, category'),
     ])
 
     const map = {}
@@ -46,8 +48,19 @@ export default function Library() {
       cur.total = a.total
       map[a.exam_set_id] = cur
     }
+
+    // รวมหมวดที่ปรากฏในแต่ละชุด (เฉพาะข้อที่มีหมวด)
+    const cats = {}
+    for (const q of qData || []) {
+      if (!q.category) continue
+      ;(cats[q.exam_set_id] ||= new Set()).add(q.category)
+    }
+    const catMap = {}
+    for (const k of Object.keys(cats)) catMap[k] = [...cats[k]]
+
     setSets(setsData || [])
     setAttempts(map)
+    setCatBySet(catMap)
     setLoading(false)
   }, [user.id])
 
@@ -57,11 +70,11 @@ export default function Library() {
 
   if (loading) return <Spinner />
 
-  // จัดกลุ่มตามหมวด
+  // จัดกลุ่มตามหมวดของคำถาม — ชุดเดียวอาจอยู่ได้หลายหมวด
   const groups = {}
   for (const s of sets) {
-    const cat = s.category || UNCATEGORIZED
-    ;(groups[cat] ||= []).push(s)
+    const setCats = catBySet[s.id]?.length ? catBySet[s.id] : [UNCATEGORIZED]
+    for (const cat of setCats) (groups[cat] ||= []).push(s)
   }
   const cats = Object.keys(groups).sort((a, b) =>
     a === UNCATEGORIZED ? 1 : b === UNCATEGORIZED ? -1 : a.localeCompare(b, 'th')
