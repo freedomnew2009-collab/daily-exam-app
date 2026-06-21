@@ -13,18 +13,28 @@ export default function Review() {
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
   const [encourage, setEncourage] = useState('')
+  const [scoreMsgs, setScoreMsgs] = useState([])
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
       setErr('')
-      const [{ data: res, error }, { data: setting }] = await Promise.all([
+      const [{ data: res, error }, { data: settings }] = await Promise.all([
         supabase.rpc('get_review', { p_user_id: user.id, p_exam_set_id: setId }),
-        supabase.from('app_settings').select('value').eq('key', 'finish_message').maybeSingle(),
+        supabase.from('app_settings').select('key, value').in('key', ['finish_message', 'score_messages']),
       ])
       if (error) setErr(error.message)
       else setData(res)
-      setEncourage(setting?.value?.trim() || '')
+      const sm = {}
+      for (const r of settings || []) sm[r.key] = r.value
+      setEncourage((sm['finish_message'] || '').trim())
+      let parsed
+      try {
+        parsed = sm['score_messages'] ? JSON.parse(sm['score_messages']) : []
+      } catch {
+        parsed = []
+      }
+      setScoreMsgs(Array.isArray(parsed) ? parsed : [])
       setLoading(false)
     })()
   }, [setId, user.id])
@@ -43,6 +53,13 @@ export default function Review() {
 
   const { score, total, items, duration_seconds } = data
   const pct = total ? score / total : 0
+  // ข้อความตามคะแนนที่แอดมินตั้งไว้ (เลือกเกณฑ์ % สูงสุดที่ผ่าน)
+  const pctNum = Math.round(pct * 100)
+  const scoreMsg =
+    [...scoreMsgs]
+      .filter((r) => r && r.t)
+      .sort((a, b) => Number(b.p) - Number(a.p))
+      .find((r) => pctNum >= Number(r.p))?.t || ''
   const cheer =
     pct === 1
       ? { emoji: '🏆', text: 'เพอร์เฟกต์! เก่งมาก ๆ เลย' }
@@ -69,7 +86,7 @@ export default function Review() {
           {score}
           <span className="text-2xl text-white/70">/{total}</span>
         </p>
-        <p className="mt-1 text-sm font-semibold text-white/90">{cheer.text}</p>
+        <p className="mt-1 text-sm font-semibold text-white/90">{scoreMsg || cheer.text}</p>
         {duration_seconds > 0 && (
           <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-sm font-bold tabular-nums">
             ⏱ ใช้เวลา {formatDuration(duration_seconds)} นาที

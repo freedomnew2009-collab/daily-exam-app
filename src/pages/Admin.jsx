@@ -260,6 +260,122 @@ function EncourageSetting() {
   )
 }
 
+// ตั้งค่าข้อความตามคะแนนที่ได้ (เป็น % ของคะแนนเต็ม)
+const SCORE_MSG_KEY = 'score_messages'
+const DEFAULT_SCORE_MSGS = [
+  { p: 100, t: '🏆 เพอร์เฟกต์! เก่งมาก ๆ ทำได้เต็มทุกข้อเลย!' },
+  { p: 80, t: '🎉 ยอดเยี่ยมมาก! เกือบเต็มแล้วนะ' },
+  { p: 60, t: '😊 ดีมาก! ทำได้เกินครึ่งแล้ว ลุยต่อเลย!' },
+  { p: 40, t: '💪 พยายามได้ดีมาก ลองทบทวนอีกนิดนะ' },
+  { p: 0, t: '🌱 ไม่เป็นไรนะ ทุกครั้งที่ลองคือการเรียนรู้ สู้ ๆ!' },
+]
+
+function ScoreMessageSetting() {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', SCORE_MSG_KEY)
+        .maybeSingle()
+      let parsed
+      try {
+        parsed = data?.value ? JSON.parse(data.value) : null
+      } catch {
+        parsed = null
+      }
+      setRows(Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_SCORE_MSGS)
+      setLoading(false)
+    })()
+  }, [])
+
+  const setRow = (i, patch) => setRows((rs) => rs.map((r, ri) => (ri === i ? { ...r, ...patch } : r)))
+  const addRow = () => setRows((rs) => [...rs, { p: 0, t: '' }])
+  const removeRow = (i) => setRows((rs) => rs.filter((_, ri) => ri !== i))
+
+  const save = async () => {
+    setSaving(true)
+    setMsg('')
+    const clean = rows
+      .map((r) => ({ p: Math.max(0, Math.min(100, Number(r.p) || 0)), t: (r.t || '').trim() }))
+      .filter((r) => r.t)
+      .sort((a, b) => b.p - a.p)
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: SCORE_MSG_KEY, value: JSON.stringify(clean), updated_at: new Date().toISOString() })
+    setMsg(error ? '❌ ' + error.message : '✅ บันทึกแล้ว')
+    setSaving(false)
+  }
+
+  if (loading)
+    return (
+      <Card>
+        <Spinner label="กำลังโหลด…" />
+      </Card>
+    )
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs text-slate-500">
+        ตั้งข้อความตามคะแนนที่ได้ (คิดเป็น % ของคะแนนเต็ม) — ระบบจะเลือกข้อความของเกณฑ์สูงสุดที่ผ่าน
+        เช่น ได้ 4/5 = 80%, ได้ 3/5 = 60%
+      </p>
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="flex flex-shrink-0 items-center gap-1">
+              <span className="text-xs font-bold text-slate-400">≥</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={r.p}
+                onChange={(e) => setRow(i, { p: e.target.value })}
+                className="w-14 rounded-lg border-2 border-violet-100 bg-white px-2 py-2 text-sm text-slate-800 outline-none focus:border-violet-400"
+              />
+              <span className="text-xs text-slate-400">%</span>
+            </div>
+            <input
+              value={r.t}
+              onChange={(e) => setRow(i, { t: e.target.value })}
+              placeholder="ข้อความให้กำลังใจ…"
+              className="min-w-0 flex-1 rounded-lg border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-violet-400"
+            />
+            <button
+              onClick={() => removeRow(i)}
+              className="flex-shrink-0 px-1 text-lg text-rose-400 hover:text-rose-600"
+              title="ลบเกณฑ์นี้"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={addRow}
+        className="w-full rounded-xl border-2 border-dashed border-violet-200 py-2 text-sm font-semibold text-violet-500 hover:bg-violet-50"
+      >
+        + เพิ่มเกณฑ์คะแนน
+      </button>
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <Button onClick={save} disabled={saving} className="px-4 py-2 text-sm">
+          {saving ? 'กำลังบันทึก…' : '💾 บันทึกข้อความ'}
+        </Button>
+        {msg && (
+          <span className={`text-xs font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 // ตั้งค่าข้อความตัวอย่าง (placeholder) ในช่องพิมพ์คำถามหน้าถาม-ตอบ
 const QA_PUBLIC_KEY = 'qa_public_placeholder'
 const QA_PRIVATE_KEY = 'qa_private_placeholder'
@@ -843,6 +959,12 @@ export default function Admin() {
       <h2 className="mb-2 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
       <div className="mb-4">
         <EncourageSetting />
+      </div>
+
+      {/* ข้อความตามคะแนนที่ได้ */}
+      <h2 className="mb-2 text-base font-bold text-slate-700">🎯 ข้อความตามคะแนนที่ได้</h2>
+      <div className="mb-4">
+        <ScoreMessageSetting />
       </div>
 
       {/* ข้อความในช่องถาม-ตอบ */}
