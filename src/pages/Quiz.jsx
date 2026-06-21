@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Spinner, Button, Empty, Badge, formatDuration } from '../components/ui'
+import { Spinner, Button, Empty, Badge, AutoTextarea, formatDuration } from '../components/ui'
 
 export default function Quiz() {
   const { setId } = useParams()
@@ -207,11 +207,11 @@ export default function Quiz() {
         <label className="mt-5 block text-sm font-bold text-slate-600">
           💭 ทำไมถึงเลือกข้อนี้? (เหตุผลของคุณ)
         </label>
-        <textarea
+        <AutoTextarea
           value={resp.reason}
           onChange={(e) => setResp({ reason: e.target.value })}
           placeholder="อธิบายเหตุผลที่เลือกคำตอบนี้…"
-          rows={3}
+          minRows={3}
           className="mt-1.5 w-full resize-none rounded-2xl border-2 border-violet-100 bg-white p-3 text-sm text-slate-800 outline-none transition focus:border-violet-400"
         />
       </div>

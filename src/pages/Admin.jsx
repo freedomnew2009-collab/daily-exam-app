@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Button, Card, Badge, Spinner, formatDuration } from '../components/ui'
+import { Button, Card, Badge, Spinner, AutoTextarea, formatDuration } from '../components/ui'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
@@ -120,10 +120,10 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
           ลบข้อนี้
         </button>
       </div>
-      <textarea
+      <AutoTextarea
         value={q.question_text}
         onChange={(e) => setField({ question_text: e.target.value })}
-        rows={2}
+        minRows={2}
         placeholder="โจทย์คำถาม…"
         className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
       />
@@ -204,12 +204,12 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
       <p className="text-xs text-slate-500">
         ✅ คำตอบที่ถูก: <b className="text-emerald-600">{q.correct_choice}</b> (แตะวงกลมตัวอักษรเพื่อเปลี่ยน)
       </p>
-      <textarea
+      <AutoTextarea
         value={q.explanation}
         onChange={(e) => setField({ explanation: e.target.value })}
-        rows={2}
-        placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ)…"
-        className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+        minRows={3}
+        placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ)… พิมพ์ยาวได้ ช่องจะขยายตามอัตโนมัติ"
+        className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-[15px] leading-relaxed text-slate-800 outline-none transition focus:border-violet-400"
       />
     </Card>
   )
@@ -890,12 +890,12 @@ function ArticlesAdmin() {
           placeholder="หัวข้อบทความ"
           className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
         />
-        <textarea
+        <AutoTextarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          rows={8}
+          minRows={8}
           placeholder="เนื้อหาบทความ… (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
-          className="w-full resize-y rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+          className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-[15px] leading-relaxed text-slate-800 outline-none transition focus:border-violet-400"
         />
 
         {/* รูปประกอบ (ใส่ได้หลายรูป — รูปแรกเป็นปก) */}

@@ -1,5 +1,33 @@
 // คอมโพเนนต์ UI เล็ก ๆ ที่ใช้ซ้ำทั้งแอพ (mobile-first, โทนสว่างสดใส)
 
+import { useEffect, useRef } from 'react'
+
+// textarea ที่ยืดสูงตามข้อความที่พิมพ์อัตโนมัติ (พิมพ์เยอะก็เห็นครบ แก้ง่ายบนมือถือ)
+export function AutoTextarea({ value, minRows = 2, className = '', onInput, ...props }) {
+  const ref = useRef(null)
+  const resize = (el) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }
+  useEffect(() => {
+    resize(ref.current)
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={minRows}
+      onInput={(e) => {
+        resize(e.target)
+        onInput?.(e)
+      }}
+      className={`overflow-hidden ${className}`}
+      {...props}
+    />
+  )
+}
+
 export function Spinner({ label = 'กำลังโหลด…' }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
