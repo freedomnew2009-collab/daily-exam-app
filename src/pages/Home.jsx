@@ -104,9 +104,8 @@ export default function Home({ onSeen }) {
             return (
               <Card key={s.id} className="animate-rise overflow-hidden">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 text-violet-600">
-                    <span className="text-[9px] font-semibold leading-none">วันที่</span>
-                    <span className="text-lg font-extrabold leading-tight">{s.day_number}</span>
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 text-2xl text-violet-600">
+                    📝
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
