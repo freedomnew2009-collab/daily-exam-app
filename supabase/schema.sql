@@ -172,6 +172,35 @@ begin
 end;
 $$;
 
+-- แอดมินเพิ่มคำถามทีละข้อเข้าไปใน "ชุดเดิม" ที่มีอยู่แล้ว
+create or replace function add_question(
+  p_exam_set_id uuid, p_question jsonb
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_q_id uuid;
+  v_idx int;
+begin
+  if auth.uid() is null then
+    raise exception 'unauthorized: admin only';
+  end if;
+
+  select coalesce(max(order_index), -1) + 1 into v_idx
+    from questions where exam_set_id = p_exam_set_id;
+
+  insert into questions(exam_set_id, order_index, question_text, choices)
+  values (p_exam_set_id, v_idx, p_question->>'question_text', p_question->'choices')
+  returning id into v_q_id;
+
+  insert into question_keys(question_id, correct_choice, explanation)
+  values (v_q_id, p_question->>'correct_choice', p_question->>'explanation');
+
+  update exam_sets set question_count = question_count + 1 where id = p_exam_set_id;
+
+  return v_q_id;
+end;
+$$;
+
 -- ผู้ใช้ส่งคำตอบ -> ระบบตรวจให้คะแนน (เฉลยไม่หลุดออกไปฝั่ง client)
 create or replace function submit_attempt(
   p_user_id uuid, p_exam_set_id uuid, p_answers jsonb
@@ -248,6 +277,7 @@ end;
 $$;
 
 grant execute on function create_exam_set(int, text, boolean, jsonb) to authenticated;
+grant execute on function add_question(uuid, jsonb) to authenticated;
 grant execute on function submit_attempt(uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function get_review(uuid, uuid) to anon, authenticated;
 

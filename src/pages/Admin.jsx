@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
@@ -137,6 +137,7 @@ export default function Admin() {
   const [privateCount, setPrivateCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
+  const [targetSetId, setTargetSetId] = useState('') // '' = สร้างชุดใหม่, ไม่งั้น = id ชุดเดิม
   const [dayNumber, setDayNumber] = useState(1)
   const [title, setTitle] = useState('')
   const [publish, setPublish] = useState(true)
@@ -145,6 +146,18 @@ export default function Admin() {
   )
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const formRef = useRef(null)
+
+  const isNewSet = targetSetId === ''
+
+  // เลือกเพิ่มเข้าชุดเดิม -> เตรียมฟอร์มแบบ "ทีละข้อ" แล้วเลื่อนขึ้นไปที่ฟอร์ม
+  const pickTarget = (setId) => {
+    setTargetSetId(setId)
+    setMsg('')
+    if (setId !== '') setQuestions([blankQuestion()])
+    else setQuestions(Array.from({ length: 5 }, blankQuestion))
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -203,16 +216,33 @@ export default function Admin() {
         correct_choice: q.correct_choice,
         explanation: q.explanation.trim(),
       }))
-      const { error } = await supabase.rpc('create_exam_set', {
-        p_day: Number(dayNumber),
-        p_title: title.trim() || `ชุดข้อสอบวันที่ ${dayNumber}`,
-        p_published: publish,
-        p_questions: payload,
-      })
-      if (error) throw error
-      setMsg('✅ บันทึกชุดข้อสอบเรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
-      setTitle('')
-      setQuestions(Array.from({ length: 5 }, blankQuestion))
+
+      if (isNewSet) {
+        const { error } = await supabase.rpc('create_exam_set', {
+          p_day: Number(dayNumber),
+          p_title: title.trim() || `ชุดข้อสอบวันที่ ${dayNumber}`,
+          p_published: publish,
+          p_questions: payload,
+        })
+        if (error) throw error
+        setMsg('✅ บันทึกชุดข้อสอบใหม่เรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
+        setTitle('')
+        setQuestions(Array.from({ length: 5 }, blankQuestion))
+      } else {
+        // เพิ่มทีละข้อเข้าไปในชุดเดิม (ทีละข้อใน payload)
+        for (const q of payload) {
+          const { error } = await supabase.rpc('add_question', {
+            p_exam_set_id: targetSetId,
+            p_question: q,
+          })
+          if (error) throw error
+        }
+        const tgt = sets.find((s) => s.id === targetSetId)
+        setMsg(
+          `✅ เพิ่ม ${payload.length} ข้อเข้า "วันที่ ${tgt?.day_number} · ${tgt?.title || ''}" แล้ว`
+        )
+        setQuestions([blankQuestion()]) // พร้อมพิมพ์ข้อถัดไปทันที
+      }
       await load()
     } catch (e) {
       setMsg('❌ ' + (e.message || 'บันทึกไม่สำเร็จ'))
@@ -255,39 +285,68 @@ export default function Admin() {
         </Card>
       </Link>
 
-      {/* สร้างชุดข้อสอบ */}
-      <h2 className="mb-2 text-base font-semibold text-slate-200">➕ เพิ่มชุดข้อสอบ</h2>
+      {/* เพิ่มข้อสอบ */}
+      <h2 ref={formRef} className="mb-2 scroll-mt-4 text-base font-semibold text-slate-200">
+        {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '➕ เพิ่มคำถามเข้าชุดเดิม'}
+      </h2>
       <Card className="mb-3 space-y-3">
-        <div className="flex gap-2">
-          <div className="w-24">
-            <label className="text-xs text-slate-400">วันที่</label>
-            <input
-              type="number"
-              min={1}
-              value={dayNumber}
-              onChange={(e) => setDayNumber(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs text-slate-400">ชื่อชุด</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={`ชุดข้อสอบวันที่ ${dayNumber}`}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
-            />
-          </div>
+        {/* เลือกปลายทาง: ชุดใหม่ หรือชุดเดิม */}
+        <div>
+          <label className="text-xs text-slate-400">เพิ่มคำถามไปไว้ที่</label>
+          <select
+            value={targetSetId}
+            onChange={(e) => pickTarget(e.target.value)}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
+          >
+            <option value="">➕ สร้างชุดใหม่</option>
+            {sets.map((s) => (
+              <option key={s.id} value={s.id}>
+                วันที่ {s.day_number} · {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
+              </option>
+            ))}
+          </select>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input
-            type="checkbox"
-            checked={publish}
-            onChange={(e) => setPublish(e.target.checked)}
-            className="h-4 w-4 accent-indigo-500"
-          />
-          เผยแพร่ทันที (ผู้ใช้เห็น + แจ้งเตือนข้อสอบใหม่)
-        </label>
+
+        {/* ฟิลด์ของชุดใหม่ (โชว์เฉพาะตอนสร้างชุดใหม่) */}
+        {isNewSet && (
+          <>
+            <div className="flex gap-2">
+              <div className="w-24">
+                <label className="text-xs text-slate-400">วันที่</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={dayNumber}
+                  onChange={(e) => setDayNumber(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-slate-400">ชื่อชุด</label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={`ชุดข้อสอบวันที่ ${dayNumber}`}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={publish}
+                onChange={(e) => setPublish(e.target.checked)}
+                className="h-4 w-4 accent-indigo-500"
+              />
+              เผยแพร่ทันที (ผู้ใช้เห็น + แจ้งเตือนข้อสอบใหม่)
+            </label>
+          </>
+        )}
+        {!isNewSet && (
+          <p className="rounded-lg bg-slate-800/60 p-2 text-xs text-slate-300">
+            กำลังเพิ่มคำถามต่อท้ายชุดที่เลือก — เพิ่มทีละข้อ หรือหลายข้อก็ได้ บันทึกแล้วฟอร์มจะพร้อมให้พิมพ์ข้อถัดไปทันที
+          </p>
+        )}
       </Card>
 
       <div className="space-y-3">
@@ -320,7 +379,11 @@ export default function Admin() {
       )}
 
       <Button onClick={save} disabled={saving} className="mt-3 w-full">
-        {saving ? 'กำลังบันทึก…' : '💾 บันทึกชุดข้อสอบ'}
+        {saving
+          ? 'กำลังบันทึก…'
+          : isNewSet
+            ? '💾 บันทึกชุดข้อสอบใหม่'
+            : `💾 เพิ่ม ${questions.length} ข้อเข้าชุดนี้`}
       </Button>
 
       {/* ชุดที่มีอยู่ */}
@@ -345,6 +408,13 @@ export default function Admin() {
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">
+                <button
+                  onClick={() => pickTarget(s.id)}
+                  className="rounded-lg bg-indigo-600/30 px-2 py-1 text-xs text-indigo-200"
+                  title="เพิ่มคำถามเข้าชุดนี้"
+                >
+                  + เพิ่มข้อ
+                </button>
                 <button
                   onClick={() => togglePublish(s)}
                   className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200"
