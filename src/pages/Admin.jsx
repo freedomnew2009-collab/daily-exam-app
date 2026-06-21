@@ -1121,10 +1121,14 @@ export default function Admin() {
   const removeQ = (i) => setQuestions((qs) => qs.filter((_, qi) => qi !== i))
   const addQ = () => setQuestions((qs) => [...qs, blankQuestion()])
 
-  const validate = () => {
-    if (questions.length === 0) return 'ต้องมีอย่างน้อย 1 ข้อ'
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i]
+  // ข้อที่ยังไม่ได้กรอกอะไรเลย -> ข้ามไป (ไม่ต้องครบ 5 ข้อ)
+  const isBlankQuestion = (q) =>
+    !q.question_text.trim() && !q.explanation.trim() && !q.choices.some((c) => c.text.trim())
+
+  const validate = (list) => {
+    if (list.length === 0) return 'กรอกอย่างน้อย 1 ข้อก่อนบันทึก'
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i]
       if (!q.question_text.trim()) return `ข้อ ${i + 1}: ยังไม่ได้ใส่โจทย์`
       const filled = q.choices.filter((c) => c.text.trim()).length
       if (filled < 2) return `ข้อ ${i + 1}: ต้องมีตัวเลือกอย่างน้อย 2 ข้อ`
@@ -1136,14 +1140,16 @@ export default function Admin() {
 
   const save = async () => {
     setMsg('')
-    const v = validate()
+    // กรอกกี่ข้อก็ได้ — ข้ามข้อที่ว่างเปล่าทิ้ง แล้วบันทึกเฉพาะข้อที่กรอก
+    const filledQuestions = questions.filter((q) => !isBlankQuestion(q))
+    const v = validate(filledQuestions)
     if (v) {
       setMsg('⚠️ ' + v)
       return
     }
     setSaving(true)
     try {
-      const payload = questions.map((q) => ({
+      const payload = filledQuestions.map((q) => ({
         question_text: q.question_text.trim(),
         image_url: q.image_url || '',
         category: (q.category || '').trim(),
@@ -1389,8 +1395,11 @@ export default function Admin() {
           ? 'กำลังบันทึก…'
           : isNewSet
             ? '💾 บันทึกชุดข้อสอบใหม่'
-            : `💾 เพิ่ม ${questions.length} ข้อเข้าชุดนี้`}
+            : `💾 เพิ่ม ${questions.filter((q) => !isBlankQuestion(q)).length} ข้อเข้าชุดนี้`}
       </Button>
+      <p className="mt-2 text-center text-xs text-slate-400">
+        กรอกกี่ข้อก็ได้ — ข้อที่เว้นว่างไว้จะถูกข้ามให้อัตโนมัติ
+      </p>
 
       {/* ชุดที่มีอยู่ */}
       <h2 id="sec-sets" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">📚 ชุดข้อสอบที่มีอยู่</h2>
