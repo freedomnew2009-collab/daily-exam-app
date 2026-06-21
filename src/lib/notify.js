@@ -31,3 +31,14 @@ export function getLastSeen() {
 export function setLastSeen(iso) {
   localStorage.setItem(SEEN_KEY, iso || new Date().toISOString())
 }
+
+// เก็บ "เห็นบทความล่าสุดถึงเวลาไหนแล้ว"
+const ARTICLE_SEEN_KEY = 'article_last_seen'
+
+export function getLastSeenArticles() {
+  return localStorage.getItem(ARTICLE_SEEN_KEY) || '1970-01-01T00:00:00Z'
+}
+
+export function setLastSeenArticles(iso) {
+  localStorage.setItem(ARTICLE_SEEN_KEY, iso || new Date().toISOString())
+}

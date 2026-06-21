@@ -2,7 +2,12 @@ import { useEffect, useState, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store'
 import { supabase, isConfigured } from './lib/supabase'
-import { getLastSeen, showNotification, ensureNotifyPermission } from './lib/notify'
+import {
+  getLastSeen,
+  getLastSeenArticles,
+  showNotification,
+  ensureNotifyPermission,
+} from './lib/notify'
 import BottomNav from './components/BottomNav'
 import InstallButton from './components/InstallButton'
 import Login from './pages/Login'
@@ -12,6 +17,7 @@ import Quiz from './pages/Quiz'
 import Review from './pages/Review'
 import QA from './pages/QA'
 import Admin from './pages/Admin'
+import Articles, { ArticleView } from './pages/Articles'
 
 function ConfigWarning() {
   return (
@@ -50,6 +56,7 @@ function Suspended() {
 export default function App() {
   const { user, ready, suspended, isAdmin } = useStore()
   const [newCount, setNewCount] = useState(0)
+  const [articleCount, setArticleCount] = useState(0)
 
   // นับข้อสอบใหม่ที่ยังไม่เห็น
   const refreshNewCount = useCallback(async () => {
@@ -63,14 +70,27 @@ export default function App() {
     setNewCount(count || 0)
   }, [])
 
-  // realtime: เด้งแจ้งเตือนเมื่อมีข้อสอบใหม่
+  // นับบทความใหม่ที่ยังไม่เห็น
+  const refreshArticleCount = useCallback(async () => {
+    if (!isConfigured) return
+    const lastSeen = getLastSeenArticles()
+    const { count } = await supabase
+      .from('articles')
+      .select('id', { count: 'exact', head: true })
+      .eq('published', true)
+      .gt('created_at', lastSeen)
+    setArticleCount(count || 0)
+  }, [])
+
+  // realtime: เด้งแจ้งเตือนเมื่อมีข้อสอบใหม่ / บทความใหม่
   useEffect(() => {
     if (!user || !isConfigured) return
     refreshNewCount()
+    refreshArticleCount()
     ensureNotifyPermission()
 
     const channel = supabase
-      .channel('exam_sets_changes')
+      .channel('app_changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'exam_sets' },
@@ -86,12 +106,27 @@ export default function App() {
         { event: 'UPDATE', schema: 'public', table: 'exam_sets' },
         () => refreshNewCount()
       )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'articles' },
+        (payload) => {
+          if (payload.new?.published) {
+            showNotification('มีบทความใหม่! 📰', payload.new.title || 'แตะเพื่ออ่านความรู้ใหม่')
+          }
+          refreshArticleCount()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'articles' },
+        () => refreshArticleCount()
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user, refreshNewCount])
+  }, [user, refreshNewCount, refreshArticleCount])
 
   if (!ready) {
     return (
@@ -122,6 +157,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home onSeen={refreshNewCount} />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/articles" element={<Articles onSeen={refreshArticleCount} />} />
+          <Route path="/articles/:id" element={<ArticleView />} />
           <Route path="/quiz/:setId" element={<Quiz />} />
           <Route path="/review/:setId" element={<Review />} />
           <Route path="/qa" element={<QA />} />
@@ -130,7 +167,7 @@ export default function App() {
         </Routes>
       </main>
       <InstallButton />
-      <BottomNav newCount={newCount} />
+      <BottomNav newCount={newCount} articleCount={articleCount} />
     </div>
   )
 }

@@ -367,6 +367,228 @@ function ExamResults({ sets }) {
   )
 }
 
+// แอดมินเขียน/จัดการบทความความรู้
+function ArticlesAdmin() {
+  const [list, setList] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState(null)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [cover, setCover] = useState('')
+  const [published, setPublished] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('articles')
+      .select('id, title, body, cover_url, published, created_at')
+      .order('created_at', { ascending: false })
+    setList(data || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const resetForm = () => {
+    setEditingId(null)
+    setTitle('')
+    setBody('')
+    setCover('')
+    setPublished(true)
+  }
+
+  const startEdit = (a) => {
+    setEditingId(a.id)
+    setTitle(a.title)
+    setBody(a.body)
+    setCover(a.cover_url || '')
+    setPublished(a.published)
+    setMsg('')
+  }
+
+  const onPickCover = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) return setMsg('⚠️ ไฟล์ต้องเป็นรูปภาพ')
+    if (file.size > 5 * 1024 * 1024) return setMsg('⚠️ รูปต้องไม่เกิน 5MB')
+    setMsg('')
+    setUploading(true)
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const path = `articles/${crypto.randomUUID()}.${ext}`
+      const { error } = await supabase.storage
+        .from('question-images')
+        .upload(path, file, { contentType: file.type, upsert: false })
+      if (error) throw error
+      const { data } = supabase.storage.from('question-images').getPublicUrl(path)
+      setCover(data.publicUrl)
+    } catch (err) {
+      setMsg('❌ อัปโหลดรูปไม่สำเร็จ: ' + (err.message || ''))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const save = async () => {
+    if (!title.trim() || !body.trim()) {
+      setMsg('⚠️ ใส่หัวข้อและเนื้อหาก่อน')
+      return
+    }
+    setSaving(true)
+    setMsg('')
+    const row = { title: title.trim(), body: body.trim(), cover_url: cover || null, published }
+    let error
+    if (editingId) {
+      ;({ error } = await supabase
+        .from('articles')
+        .update({ ...row, updated_at: new Date().toISOString() })
+        .eq('id', editingId))
+    } else {
+      ;({ error } = await supabase.from('articles').insert(row))
+    }
+    setSaving(false)
+    if (error) {
+      setMsg('❌ ' + error.message)
+      return
+    }
+    setMsg('✅ บันทึกบทความแล้ว' + (published ? ' (เผยแพร่ + แจ้งเตือนสมาชิก)' : ' (ฉบับร่าง)'))
+    resetForm()
+    load()
+  }
+
+  const togglePublish = async (a) => {
+    await supabase.from('articles').update({ published: !a.published }).eq('id', a.id)
+    load()
+  }
+
+  const remove = async (a) => {
+    if (!confirm(`ลบบทความ "${a.title}"?`)) return
+    await supabase.from('articles').delete().eq('id', a.id)
+    if (editingId === a.id) resetForm()
+    load()
+  }
+
+  return (
+    <>
+      <Card className="space-y-3">
+        <p className="text-sm font-bold text-violet-600">
+          {editingId ? '✏️ แก้ไขบทความ' : '✍️ เขียนบทความใหม่'}
+        </p>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="หัวข้อบทความ"
+          className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
+        />
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={8}
+          placeholder="เนื้อหาบทความ… (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
+          className="w-full resize-y rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+        />
+
+        {/* รูปปก */}
+        {cover ? (
+          <div className="relative">
+            <img src={cover} alt="" className="max-h-48 w-full rounded-xl border border-violet-100 object-cover" />
+            <button
+              type="button"
+              onClick={() => setCover('')}
+              className="absolute right-2 top-2 rounded-full bg-rose-500 px-2.5 py-1 text-xs font-bold text-white shadow-md"
+            >
+              ✕ ลบรูปปก
+            </button>
+          </div>
+        ) : (
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50">
+            {uploading ? '⏳ กำลังอัปโหลด…' : '🖼️ เพิ่มรูปปก (ไม่บังคับ)'}
+            <input type="file" accept="image/*" onChange={onPickCover} disabled={uploading} className="hidden" />
+          </label>
+        )}
+
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+          <input
+            type="checkbox"
+            checked={published}
+            onChange={(e) => setPublished(e.target.checked)}
+            className="h-4 w-4 accent-violet-500"
+          />
+          เผยแพร่ทันที (สมาชิกเห็น + เด้งแจ้งเตือนบทความใหม่)
+        </label>
+
+        {msg && (
+          <p className={`text-sm font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {msg}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button onClick={save} disabled={saving} className="flex-1">
+            {saving ? 'กำลังบันทึก…' : editingId ? '💾 บันทึกการแก้ไข' : '📤 เผยแพร่บทความ'}
+          </Button>
+          {editingId && (
+            <Button variant="outline" onClick={resetForm}>
+              ยกเลิก
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {/* รายการบทความที่มี */}
+      {loading ? (
+        <Spinner label="กำลังโหลดบทความ…" />
+      ) : list.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">ยังไม่มีบทความ</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {list.map((a) => (
+            <Card key={a.id} className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate font-bold text-slate-800">{a.title}</p>
+                <p className="text-xs text-slate-400">
+                  {a.published ? (
+                    <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
+                  ) : (
+                    <span className="font-semibold text-amber-600">ฉบับร่าง</span>
+                  )}{' '}
+                  · {new Date(a.created_at).toLocaleDateString('th-TH')}
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 gap-1">
+                <button
+                  onClick={() => startEdit(a)}
+                  className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
+                >
+                  แก้ไข
+                </button>
+                <button
+                  onClick={() => togglePublish(a)}
+                  className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
+                >
+                  {a.published ? 'ซ่อน' : 'เผยแพร่'}
+                </button>
+                <button
+                  onClick={() => remove(a)}
+                  className="rounded-lg bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-200"
+                >
+                  ลบ
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function Admin() {
   const { isAdmin, adminEmail, adminSignOut } = useStore()
   const [sets, setSets] = useState([])
@@ -544,6 +766,12 @@ export default function Admin() {
       <h2 className="mb-2 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
       <div className="mb-4">
         <EncourageSetting />
+      </div>
+
+      {/* บทความความรู้ */}
+      <h2 className="mb-2 text-base font-bold text-slate-700">📰 บทความความรู้</h2>
+      <div className="mb-4">
+        <ArticlesAdmin />
       </div>
 
       {/* เพิ่มข้อสอบ */}

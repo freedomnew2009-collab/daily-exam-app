@@ -100,9 +100,22 @@ create table if not exists qa_replies (
   created_at timestamptz not null default now()
 );
 
+-- บทความความรู้จากแอดมิน (สมาชิกอ่านได้ + เด้งเตือนเมื่อมีใหม่)
+create table if not exists articles (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  cover_url text,
+  published boolean not null default true,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_questions_set on questions(exam_set_id);
 create index if not exists idx_attempts_user on attempts(user_id, exam_set_id);
 create index if not exists idx_replies_thread on qa_replies(thread_id);
+create index if not exists idx_articles_pub on articles(published, created_at desc);
 
 -- ---------- เปิด Row Level Security ----------
 alter table profiles enable row level security;
@@ -114,6 +127,7 @@ alter table answers enable row level security;
 alter table qa_threads enable row level security;
 alter table qa_replies enable row level security;
 alter table app_settings enable row level security;
+alter table articles enable row level security;
 
 -- profiles: ใครก็อ่าน/สร้างได้ (ระบบไม่ต้องยืนยันตัวตน) แต่อัปเดต (ระงับ) ได้เฉพาะแอดมิน
 drop policy if exists p_profiles_sel on profiles;
@@ -185,6 +199,18 @@ create policy p_settings_ins on app_settings for insert with check (auth.uid() i
 drop policy if exists p_settings_upd on app_settings;
 create policy p_settings_upd on app_settings for update
   using (auth.uid() is not null) with check (auth.uid() is not null);
+
+-- articles: อ่านได้ถ้าเผยแพร่ (หรือแอดมิน), เพิ่ม/แก้ไข/ลบ เฉพาะแอดมิน
+drop policy if exists p_articles_sel on articles;
+create policy p_articles_sel on articles for select
+  using (published = true or auth.uid() is not null);
+drop policy if exists p_articles_ins on articles;
+create policy p_articles_ins on articles for insert with check (auth.uid() is not null);
+drop policy if exists p_articles_upd on articles;
+create policy p_articles_upd on articles for update
+  using (auth.uid() is not null) with check (auth.uid() is not null);
+drop policy if exists p_articles_del on articles;
+create policy p_articles_del on articles for delete using (auth.uid() is not null);
 
 -- ---------- ฟังก์ชัน (RPC) ----------
 
@@ -443,7 +469,8 @@ drop policy if exists qimg_admin_delete on storage.objects;
 create policy qimg_admin_delete on storage.objects for delete
   using (bucket_id = 'question-images' and auth.uid() is not null);
 
--- ---------- Realtime (แจ้งเตือนข้อสอบใหม่ + ถาม-ตอบสด) ----------
-alter publication supabase_realtime add table exam_sets;
-alter publication supabase_realtime add table qa_threads;
-alter publication supabase_realtime add table qa_replies;
+-- ---------- Realtime (แจ้งเตือนข้อสอบใหม่ + บทความใหม่ + ถาม-ตอบสด) ----------
+do $$ begin alter publication supabase_realtime add table exam_sets; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table qa_threads; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table qa_replies; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table articles; exception when duplicate_object then null; end $$;

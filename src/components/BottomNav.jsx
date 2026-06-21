@@ -4,11 +4,12 @@ import { useStore } from '../store'
 const tabs = [
   { to: '/', label: 'ข้อสอบ', icon: '📝', end: true },
   { to: '/library', label: 'คลัง', icon: '📚' },
+  { to: '/articles', label: 'บทความ', icon: '📰', articleTab: true },
   { to: '/qa', label: 'ถาม-ตอบ', icon: '💬' },
   { to: '/admin', label: 'แอดมิน', icon: '🛠️', adminTab: true },
 ]
 
-export default function BottomNav({ newCount = 0 }) {
+export default function BottomNav({ newCount = 0, articleCount = 0 }) {
   const { isAdmin } = useStore()
 
   return (
@@ -41,6 +42,11 @@ export default function BottomNav({ newCount = 0 }) {
                 {t.to === '/' && newCount > 0 && (
                   <span className="absolute right-4 top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-1 text-[10px] font-bold text-white shadow-md shadow-rose-300/50">
                     {newCount}
+                  </span>
+                )}
+                {t.articleTab && articleCount > 0 && (
+                  <span className="absolute right-3 top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-1 text-[10px] font-bold text-white shadow-md shadow-rose-300/50">
+                    {articleCount}
                   </span>
                 )}
               </>
