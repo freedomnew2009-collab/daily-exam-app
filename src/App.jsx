@@ -7,6 +7,7 @@ import BottomNav from './components/BottomNav'
 import InstallButton from './components/InstallButton'
 import Login from './pages/Login'
 import Home from './pages/Home'
+import Library from './pages/Library'
 import Quiz from './pages/Quiz'
 import Review from './pages/Review'
 import QA from './pages/QA'
@@ -120,6 +121,7 @@ export default function App() {
       <main className="flex-1 pb-2">
         <Routes>
           <Route path="/" element={<Home onSeen={refreshNewCount} />} />
+          <Route path="/library" element={<Library />} />
           <Route path="/quiz/:setId" element={<Quiz />} />
           <Route path="/review/:setId" element={<Review />} />
           <Route path="/qa" element={<QA />} />

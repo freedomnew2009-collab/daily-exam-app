@@ -1,0 +1,158 @@
+import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useStore } from '../store'
+import { supabase, isConfigured } from '../lib/supabase'
+import { Spinner, Button, Badge, Empty, Card } from '../components/ui'
+
+const UNCATEGORIZED = 'อื่น ๆ'
+
+export default function Library() {
+  const { user, isAdmin, logoutUser, adminSignOut } = useStore()
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [sets, setSets] = useState([])
+  const [attempts, setAttempts] = useState({})
+  const [collapsed, setCollapsed] = useState({}) // category -> ซ่อนอยู่ไหม
+
+  const logoutAll = async () => {
+    if (isAdmin) await adminSignOut()
+    logoutUser()
+  }
+
+  const load = useCallback(async () => {
+    if (!isConfigured) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const [{ data: setsData }, { data: attemptData }] = await Promise.all([
+      supabase
+        .from('exam_sets')
+        .select('id, day_number, title, category, created_at, question_count')
+        .eq('published', true)
+        .order('day_number', { ascending: true }),
+      supabase
+        .from('attempts')
+        .select('exam_set_id, score, total, completed')
+        .eq('user_id', user.id)
+        .eq('completed', true),
+    ])
+
+    const map = {}
+    for (const a of attemptData || []) {
+      const cur = map[a.exam_set_id] || { count: 0, best: 0, total: a.total }
+      cur.count += 1
+      cur.best = Math.max(cur.best, a.score || 0)
+      cur.total = a.total
+      map[a.exam_set_id] = cur
+    }
+    setSets(setsData || [])
+    setAttempts(map)
+    setLoading(false)
+  }, [user.id])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (loading) return <Spinner />
+
+  // จัดกลุ่มตามหมวด
+  const groups = {}
+  for (const s of sets) {
+    const cat = s.category || UNCATEGORIZED
+    ;(groups[cat] ||= []).push(s)
+  }
+  const cats = Object.keys(groups).sort((a, b) =>
+    a === UNCATEGORIZED ? 1 : b === UNCATEGORIZED ? -1 : a.localeCompare(b, 'th')
+  )
+
+  return (
+    <div className="px-4 pt-4">
+      <header className="animate-rise mb-5 flex items-center justify-between rounded-3xl bg-gradient-to-r from-fuchsia-500 to-violet-500 p-4 text-white shadow-lg shadow-fuchsia-300/50">
+        <div className="min-w-0">
+          <p className="text-xs text-white/80">รวมข้อสอบทั้งหมด แยกตามหมวด</p>
+          <h1 className="text-lg font-extrabold">📚 คลังข้อสอบ</h1>
+        </div>
+        <button
+          onClick={logoutAll}
+          className="flex-shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/30"
+        >
+          ↩ ออก
+        </button>
+      </header>
+
+      {sets.length === 0 ? (
+        <Empty
+          icon="🗂️"
+          title="ยังไม่มีข้อสอบในคลัง"
+          hint={isAdmin ? 'ไปที่แท็บแอดมินเพื่อเพิ่มชุดข้อสอบ' : 'รอแอดมินส่งข้อสอบเข้ามา'}
+        />
+      ) : (
+        <div className="space-y-5 pb-4">
+          {cats.map((cat) => {
+            const list = groups[cat]
+            const isCollapsed = collapsed[cat]
+            return (
+              <section key={cat}>
+                <button
+                  onClick={() => setCollapsed((c) => ({ ...c, [cat]: !c[cat] }))}
+                  className="mb-2 flex w-full items-center gap-2"
+                >
+                  <span className="text-base font-bold text-slate-700">📁 {cat}</span>
+                  <Badge color="indigo">{list.length}</Badge>
+                  <span className="ml-auto text-xs text-slate-400">{isCollapsed ? '▼ แสดง' : '▲ ซ่อน'}</span>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="space-y-3">
+                    {list.map((s) => {
+                      const a = attempts[s.id]
+                      const done = a && a.count > 0
+                      return (
+                        <Card key={s.id} className="animate-rise">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 text-violet-600">
+                              <span className="text-[9px] font-semibold leading-none">วันที่</span>
+                              <span className="text-lg font-extrabold leading-tight">{s.day_number}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              {done && (
+                                <Badge color="green">
+                                  🏆 สูงสุด {a.best}/{a.total ?? s.question_count}
+                                </Badge>
+                              )}
+                              <p className="mt-0.5 truncate font-bold text-slate-800">
+                                {s.title || 'ชุดข้อสอบ'}
+                              </p>
+                              <p className="text-xs text-slate-400">{s.question_count ?? 5} ข้อ</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex gap-2">
+                            <Button className="flex-1" onClick={() => navigate(`/quiz/${s.id}`)}>
+                              {done ? '🔁 ทำใหม่' : '🚀 เริ่มทำข้อสอบ'}
+                            </Button>
+                            <Button
+                              variant={done ? 'outline' : 'ghost'}
+                              className="flex-1"
+                              disabled={!done}
+                              onClick={() => done && navigate(`/review/${s.id}`)}
+                              title={done ? '' : 'ต้องทำข้อสอบก่อนถึงดูเฉลยได้'}
+                            >
+                              {done ? '📖 ดูเฉลย' : '🔒 ดูเฉลย'}
+                            </Button>
+                          </div>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}

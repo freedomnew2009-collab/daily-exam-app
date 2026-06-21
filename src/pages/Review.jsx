@@ -12,17 +12,19 @@ export default function Review() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
+  const [encourage, setEncourage] = useState('')
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
       setErr('')
-      const { data: res, error } = await supabase.rpc('get_review', {
-        p_user_id: user.id,
-        p_exam_set_id: setId,
-      })
+      const [{ data: res, error }, { data: setting }] = await Promise.all([
+        supabase.rpc('get_review', { p_user_id: user.id, p_exam_set_id: setId }),
+        supabase.from('app_settings').select('value').eq('key', 'finish_message').maybeSingle(),
+      ])
       if (error) setErr(error.message)
       else setData(res)
+      setEncourage(setting?.value?.trim() || '')
       setLoading(false)
     })()
   }, [setId, user.id])
@@ -72,6 +74,11 @@ export default function Review() {
           <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-sm font-bold tabular-nums">
             ⏱ ใช้เวลา {formatDuration(duration_seconds)} นาที
           </p>
+        )}
+        {encourage && (
+          <div className="mt-4 rounded-2xl bg-white/20 p-3 text-sm font-semibold leading-relaxed text-white">
+            💛 {encourage}
+          </div>
         )}
         <div className="mt-4 flex justify-center gap-2">
           <button

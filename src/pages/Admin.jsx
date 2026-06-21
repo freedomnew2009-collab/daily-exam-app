@@ -194,6 +194,72 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
   )
 }
 
+// ตั้งค่าข้อความให้กำลังใจที่แสดงหลังผู้ใช้ทำข้อสอบเสร็จ
+const ENCOURAGE_KEY = 'finish_message'
+const ENCOURAGE_PLACEHOLDER =
+  'เช่น: เก่งมากที่ตั้งใจทำจนจบ! ทุกข้อที่ลองคือก้าวที่โตขึ้น ✨ พรุ่งนี้ลุยต่อกันนะ 💪'
+
+function EncourageSetting() {
+  const [text, setText] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', ENCOURAGE_KEY)
+        .maybeSingle()
+      setText(data?.value ?? '')
+      setLoading(false)
+    })()
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    setMsg('')
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: ENCOURAGE_KEY, value: text.trim(), updated_at: new Date().toISOString() })
+    setMsg(error ? '❌ ' + error.message : '✅ บันทึกข้อความแล้ว')
+    setSaving(false)
+  }
+
+  if (loading)
+    return (
+      <Card>
+        <Spinner label="กำลังโหลด…" />
+      </Card>
+    )
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs text-slate-500">
+        ข้อความนี้จะแสดงให้กำลังใจหลังผู้ใช้ทำข้อสอบเสร็จและเห็นคะแนน (ทุกชุด) — เว้นว่างไว้ถ้าไม่ต้องการ
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        placeholder={ENCOURAGE_PLACEHOLDER}
+        className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={save} disabled={saving} className="px-4 py-2 text-sm">
+          {saving ? 'กำลังบันทึก…' : '💾 บันทึกข้อความ'}
+        </Button>
+        {msg && (
+          <span className={`text-xs font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 // ผลตรวจสำหรับแอดมิน — เลือกชุด แล้วดูคำตอบ + เหตุผลของผู้ใช้ทุกคน
 function ExamResults({ sets }) {
   const [setId, setSetId] = useState('')
@@ -311,6 +377,7 @@ export default function Admin() {
   const [targetSetId, setTargetSetId] = useState('') // '' = สร้างชุดใหม่, ไม่งั้น = id ชุดเดิม
   const [dayNumber, setDayNumber] = useState(1)
   const [title, setTitle] = useState('')
+  const [category, setCategory] = useState('')
   const [publish, setPublish] = useState(true)
   const [questions, setQuestions] = useState(() =>
     Array.from({ length: 5 }, blankQuestion)
@@ -335,7 +402,7 @@ export default function Admin() {
     const [{ data: setsData }, { count }, { data: usersData }] = await Promise.all([
       supabase
         .from('exam_sets')
-        .select('id, day_number, title, published, question_count, created_at')
+        .select('id, day_number, title, category, published, question_count, created_at')
         .order('day_number', { ascending: true }),
       supabase
         .from('qa_threads')
@@ -407,6 +474,7 @@ export default function Admin() {
           p_title: title.trim() || `ชุดข้อสอบวันที่ ${dayNumber}`,
           p_published: publish,
           p_questions: payload,
+          p_category: category.trim(),
         })
         if (error) throw error
         setMsg('✅ บันทึกชุดข้อสอบใหม่เรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
@@ -472,6 +540,12 @@ export default function Admin() {
         </Card>
       </Link>
 
+      {/* ข้อความให้กำลังใจหลังทำข้อสอบ */}
+      <h2 className="mb-2 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
+      <div className="mb-4">
+        <EncourageSetting />
+      </div>
+
       {/* เพิ่มข้อสอบ */}
       <h2 ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
         {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '➕ เพิ่มคำถามเข้าชุดเดิม'}
@@ -517,6 +591,23 @@ export default function Admin() {
                   className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
                 />
               </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500">
+                หมวด (สำหรับจัดกลุ่มในคลังข้อสอบ)
+              </label>
+              <input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                list="category-list"
+                placeholder="เช่น คณิตศาสตร์, กายวิภาค, ทั่วไป…"
+                className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
+              />
+              <datalist id="category-list">
+                {[...new Set(sets.map((s) => s.category).filter(Boolean))].map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
               <input
@@ -585,13 +676,16 @@ export default function Admin() {
                 <p className="truncate font-bold text-slate-800">
                   วันที่ {s.day_number} · {s.title}
                 </p>
-                <p className="text-xs text-slate-400">
-                  {s.question_count} ข้อ ·{' '}
-                  {s.published ? (
-                    <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
-                  ) : (
-                    <span className="font-semibold text-amber-600">ฉบับร่าง</span>
-                  )}
+                <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                  {s.category && <Badge color="indigo">{s.category}</Badge>}
+                  <span>
+                    {s.question_count} ข้อ ·{' '}
+                    {s.published ? (
+                      <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
+                    ) : (
+                      <span className="font-semibold text-amber-600">ฉบับร่าง</span>
+                    )}
+                  </span>
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">

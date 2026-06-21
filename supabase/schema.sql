@@ -20,10 +20,20 @@ create table if not exists exam_sets (
   id uuid primary key default gen_random_uuid(),
   day_number int not null,
   title text,
+  category text, -- หมวดของชุดข้อสอบ (ใช้จัดกลุ่มในคลังข้อสอบ)
   question_count int not null default 0,
   published boolean not null default false,
   created_by uuid,
   created_at timestamptz not null default now()
+);
+-- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
+alter table exam_sets add column if not exists category text;
+
+-- ตั้งค่าทั่วไปของแอป (key-value) เช่น ข้อความให้กำลังใจหลังทำข้อสอบ
+create table if not exists app_settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz not null default now()
 );
 
 -- คำถาม (ไม่มีคำตอบ/เฉลย เพื่อกันผู้ใช้ดึงไปดูก่อนทำ)
@@ -103,6 +113,7 @@ alter table attempts enable row level security;
 alter table answers enable row level security;
 alter table qa_threads enable row level security;
 alter table qa_replies enable row level security;
+alter table app_settings enable row level security;
 
 -- profiles: ใครก็อ่าน/สร้างได้ (ระบบไม่ต้องยืนยันตัวตน) แต่อัปเดต (ระงับ) ได้เฉพาะแอดมิน
 drop policy if exists p_profiles_sel on profiles;
@@ -166,11 +177,22 @@ create policy p_replies_sel on qa_replies for select
     or exists (select 1 from qa_threads t where t.id = thread_id and t.is_public = true)
   );
 
+-- app_settings: อ่านได้ทุกคน, เพิ่ม/แก้ไขได้เฉพาะแอดมิน
+drop policy if exists p_settings_sel on app_settings;
+create policy p_settings_sel on app_settings for select using (true);
+drop policy if exists p_settings_ins on app_settings;
+create policy p_settings_ins on app_settings for insert with check (auth.uid() is not null);
+drop policy if exists p_settings_upd on app_settings;
+create policy p_settings_upd on app_settings for update
+  using (auth.uid() is not null) with check (auth.uid() is not null);
+
 -- ---------- ฟังก์ชัน (RPC) ----------
 
--- แอดมินสร้างชุดข้อสอบ + คำถาม + เฉลย ในครั้งเดียว
-create or replace function create_exam_set(
-  p_day int, p_title text, p_published boolean, p_questions jsonb
+-- แอดมินสร้างชุดข้อสอบ + คำถาม + เฉลย ในครั้งเดียว (รองรับหมวด)
+drop function if exists create_exam_set(int, text, boolean, jsonb);
+drop function if exists create_exam_set(int, text, boolean, jsonb, text);
+create function create_exam_set(
+  p_day int, p_title text, p_published boolean, p_questions jsonb, p_category text default ''
 ) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
@@ -183,8 +205,9 @@ begin
     raise exception 'unauthorized: admin only';
   end if;
 
-  insert into exam_sets(day_number, title, published, question_count, created_by)
-  values (p_day, p_title, p_published, jsonb_array_length(p_questions), auth.uid())
+  insert into exam_sets(day_number, title, published, question_count, created_by, category)
+  values (p_day, p_title, p_published, jsonb_array_length(p_questions), auth.uid(),
+          nullif(btrim(p_category), ''))
   returning id into v_set_id;
 
   for rec in select * from jsonb_array_elements(p_questions) loop
@@ -396,7 +419,7 @@ begin
 end;
 $$;
 
-grant execute on function create_exam_set(int, text, boolean, jsonb) to authenticated;
+grant execute on function create_exam_set(int, text, boolean, jsonb, text) to authenticated;
 grant execute on function add_question(uuid, jsonb) to authenticated;
 grant execute on function get_private_threads(uuid) to anon, authenticated;
 grant execute on function submit_attempt(uuid, uuid, jsonb, int) to anon, authenticated;
