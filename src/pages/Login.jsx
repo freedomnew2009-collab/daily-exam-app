@@ -42,45 +42,51 @@ export default function Login() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-indigo-600 text-4xl shadow-lg shadow-indigo-900/50">
+        <div className="animate-float mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br from-violet-500 to-indigo-500 text-5xl shadow-xl shadow-violet-300/60">
           📝
         </div>
-        <h1 className="text-2xl font-bold text-white">ข้อสอบรายวัน</h1>
-        <p className="mt-1 text-sm text-slate-400">ทำข้อสอบวันละ 5 ข้อ พร้อมเฉลยและถาม-ตอบ</p>
+        <h1 className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-3xl font-extrabold text-transparent">
+          ข้อสอบรายวัน
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">ทำข้อสอบวันละ 5 ข้อ พร้อมเฉลยและถาม-ตอบ 🎉</p>
       </div>
 
-      <div className="mb-4 flex rounded-xl bg-slate-800 p-1">
+      <div className="mb-4 flex rounded-2xl bg-white/70 p-1 shadow-md shadow-violet-200/40">
         <button
           onClick={() => { setTab('user'); setErr('') }}
-          className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-            tab === 'user' ? 'bg-indigo-600 text-white' : 'text-slate-300'
+          className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
+            tab === 'user'
+              ? 'bg-gradient-to-r from-violet-500 to-indigo-500 text-white shadow-md shadow-violet-300/50'
+              : 'text-slate-500'
           }`}
         >
-          ผู้ใช้
+          🙂 ผู้ใช้
         </button>
         <button
           onClick={() => { setTab('admin'); setErr('') }}
-          className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-            tab === 'admin' ? 'bg-indigo-600 text-white' : 'text-slate-300'
+          className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
+            tab === 'admin'
+              ? 'bg-gradient-to-r from-violet-500 to-indigo-500 text-white shadow-md shadow-violet-300/50'
+              : 'text-slate-500'
           }`}
         >
-          แอดมิน
+          🛠️ แอดมิน
         </button>
       </div>
 
       {tab === 'user' ? (
         <form onSubmit={submitUser} className="space-y-3">
-          <label className="block text-sm text-slate-300">
+          <label className="block text-sm font-medium text-slate-600">
             ชื่อของคุณ (ไม่ต้องสมัคร — ใช้ชื่อเดิมเข้าได้เลย)
           </label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="เช่น หมอเอ, นักเรียน01"
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-indigo-500"
+            className="w-full rounded-2xl border-2 border-violet-100 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400"
             autoFocus
           />
-          {err && <p className="text-sm text-rose-400">{err}</p>}
+          {err && <p className="text-sm font-medium text-rose-500">{err}</p>}
           <Button type="submit" disabled={busy} className="w-full">
             {busy ? 'กำลังเข้า…' : 'เข้าใช้งาน'}
           </Button>
@@ -92,20 +98,20 @@ export default function Login() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="อีเมลแอดมิน"
             type="email"
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-indigo-500"
+            className="w-full rounded-2xl border-2 border-violet-100 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400"
           />
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="รหัสผ่าน"
             type="password"
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-indigo-500"
+            className="w-full rounded-2xl border-2 border-violet-100 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400"
           />
-          {err && <p className="text-sm text-rose-400">{err}</p>}
+          {err && <p className="text-sm font-medium text-rose-500">{err}</p>}
           <Button type="submit" disabled={busy} className="w-full">
             {busy ? 'กำลังเข้า…' : 'เข้าสู่ระบบแอดมิน'}
           </Button>
-          <p className="text-center text-xs text-slate-500">
+          <p className="text-center text-xs text-slate-400">
             * บัญชีแอดมินสร้างใน Supabase → Authentication → Add user
           </p>
         </form>

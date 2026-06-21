@@ -13,10 +13,10 @@ import Admin from './pages/Admin'
 
 function ConfigWarning() {
   return (
-    <div className="mx-3 mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
-      ⚠️ ยังไม่ได้ตั้งค่า Supabase — เปิดไฟล์ <code className="rounded bg-black/30 px-1">.env</code> แล้วใส่{' '}
-      <code className="rounded bg-black/30 px-1">VITE_SUPABASE_URL</code> และ{' '}
-      <code className="rounded bg-black/30 px-1">VITE_SUPABASE_ANON_KEY</code> (ดู README)
+    <div className="mx-3 mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+      ⚠️ ยังไม่ได้ตั้งค่า Supabase — เปิดไฟล์ <code className="rounded bg-amber-100 px-1">.env</code> แล้วใส่{' '}
+      <code className="rounded bg-amber-100 px-1">VITE_SUPABASE_URL</code> และ{' '}
+      <code className="rounded bg-amber-100 px-1">VITE_SUPABASE_ANON_KEY</code> (ดู README)
     </div>
   )
 }
@@ -29,15 +29,15 @@ function Suspended() {
   }
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
-      <div className="mb-4 text-6xl">🚫</div>
-      <h1 className="mb-2 text-xl font-bold text-white">บัญชีถูกระงับการใช้งาน</h1>
-      <p className="mb-1 text-slate-300">
-        บัญชี “{user?.username}” ถูกแอดมินระงับ จึงใช้งานแอปไม่ได้ชั่วคราว
+      <div className="animate-float mb-4 text-6xl">🙈</div>
+      <h1 className="mb-2 text-xl font-bold text-slate-800">บัญชีถูกพักไว้ชั่วคราว</h1>
+      <p className="mb-1 text-slate-600">
+        บัญชี “{user?.username}” ถูกแอดมินพักการใช้งาน จึงเข้าใช้แอปไม่ได้ตอนนี้
       </p>
-      <p className="mb-6 text-sm text-slate-500">หากคิดว่าผิดพลาด กรุณาติดต่อแอดมิน</p>
+      <p className="mb-6 text-sm text-slate-400">หากคิดว่าผิดพลาด ทักหาแอดมินได้เลยนะ 💛</p>
       <button
         onClick={logout}
-        className="rounded-xl border border-slate-700 px-5 py-3 text-slate-200 hover:bg-slate-800"
+        className="rounded-2xl border-2 border-violet-200 px-5 py-3 font-bold text-violet-700 hover:bg-violet-50"
       >
         ↩ ออกจากระบบ
       </button>
@@ -93,7 +93,10 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">กำลังเริ่มต้น…</div>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-400">
+        <div className="animate-float text-5xl">📝</div>
+        <span>กำลังเริ่มต้น…</span>
+      </div>
     )
   }
 
@@ -110,7 +113,7 @@ export default function App() {
   if (suspended && !isAdmin) return <Suspended />
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col bg-slate-950">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col">
       {!isConfigured && <ConfigWarning />}
       <main className="flex-1 pb-2">
         <Routes>

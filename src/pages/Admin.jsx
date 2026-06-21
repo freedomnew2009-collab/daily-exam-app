@@ -38,9 +38,9 @@ function AdminLogin() {
   return (
     <div className="px-4 pt-8">
       <div className="mx-auto max-w-sm">
-        <div className="mb-4 text-center text-5xl">🛠️</div>
-        <h1 className="mb-1 text-center text-lg font-bold text-white">เข้าสู่ระบบแอดมิน</h1>
-        <p className="mb-5 text-center text-sm text-slate-400">
+        <div className="animate-float mb-4 text-center text-5xl">🛠️</div>
+        <h1 className="mb-1 text-center text-lg font-bold text-slate-800">เข้าสู่ระบบแอดมิน</h1>
+        <p className="mb-5 text-center text-sm text-slate-500">
           สำหรับเพิ่ม/แก้ไขข้อสอบ และตอบคำถามส่วนตัว
         </p>
         <form onSubmit={submit} className="space-y-3">
@@ -49,21 +49,21 @@ function AdminLogin() {
             onChange={(e) => setEmail(e.target.value)}
             type="email"
             placeholder="อีเมลแอดมิน"
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-indigo-500"
+            className="w-full rounded-2xl border-2 border-violet-100 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400"
           />
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
             placeholder="รหัสผ่าน"
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-indigo-500"
+            className="w-full rounded-2xl border-2 border-violet-100 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400"
           />
-          {err && <p className="text-sm text-rose-400">{err}</p>}
+          {err && <p className="text-sm font-medium text-rose-500">{err}</p>}
           <Button type="submit" disabled={busy} className="w-full">
             {busy ? 'กำลังเข้า…' : 'เข้าสู่ระบบ'}
           </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-slate-500">
+        <p className="mt-4 text-center text-xs text-slate-400">
           * สร้างบัญชีแอดมินที่ Supabase → Authentication → Add user
         </p>
       </div>
@@ -81,8 +81,8 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
   return (
     <Card className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-bold text-indigo-300">ข้อ {index + 1}</span>
-        <button onClick={onRemove} className="text-xs text-rose-400 hover:underline">
+        <span className="text-sm font-bold text-violet-600">ข้อ {index + 1}</span>
+        <button onClick={onRemove} className="text-xs font-semibold text-rose-500 hover:underline">
           ลบข้อนี้
         </button>
       </div>
@@ -91,7 +91,7 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
         onChange={(e) => setField({ question_text: e.target.value })}
         rows={2}
         placeholder="โจทย์คำถาม…"
-        className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 p-2 text-sm text-white outline-none focus:border-indigo-500"
+        className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
       />
       <div className="space-y-2">
         {q.choices.map((c, i) => (
@@ -101,8 +101,8 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
               onClick={() => setField({ correct_choice: c.key })}
               className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
                 q.correct_choice === c.key
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-700 text-slate-300'
+                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                  : 'bg-violet-100 text-violet-500'
               }`}
               title="แตะเพื่อตั้งเป็นคำตอบที่ถูก"
             >
@@ -112,20 +112,20 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
               value={c.text}
               onChange={(e) => setChoice(i, e.target.value)}
               placeholder={`ตัวเลือก ${c.key}`}
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+              className="flex-1 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
             />
           </div>
         ))}
       </div>
       <p className="text-xs text-slate-500">
-        ✅ คำตอบที่ถูก: <b className="text-emerald-400">{q.correct_choice}</b> (แตะวงกลมตัวอักษรเพื่อเปลี่ยน)
+        ✅ คำตอบที่ถูก: <b className="text-emerald-600">{q.correct_choice}</b> (แตะวงกลมตัวอักษรเพื่อเปลี่ยน)
       </p>
       <textarea
         value={q.explanation}
         onChange={(e) => setField({ explanation: e.target.value })}
         rows={2}
         placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ)…"
-        className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 p-2 text-sm text-white outline-none focus:border-indigo-500"
+        className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
       />
     </Card>
   )
@@ -277,12 +277,15 @@ export default function Admin() {
 
   return (
     <div className="px-4 pt-4 pb-6">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-white">แผงแอดมิน</h1>
-          <p className="text-xs text-slate-400">{adminEmail}</p>
+      <header className="mb-4 flex items-center justify-between rounded-3xl bg-gradient-to-r from-violet-500 to-indigo-500 p-4 text-white shadow-lg shadow-violet-300/50">
+        <div className="min-w-0">
+          <h1 className="text-lg font-extrabold">🛠️ แผงแอดมิน</h1>
+          <p className="truncate text-xs text-white/80">{adminEmail}</p>
         </div>
-        <button onClick={adminSignOut} className="text-sm text-slate-400 underline">
+        <button
+          onClick={adminSignOut}
+          className="flex-shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/30"
+        >
           ออกจากแอดมิน
         </button>
       </header>
@@ -291,7 +294,7 @@ export default function Admin() {
       <Link to="/qa" className="mb-4 block">
         <Card className="flex items-center justify-between">
           <div>
-            <p className="font-medium text-white">📨 คำถามส่วนตัวถึงแอดมิน</p>
+            <p className="font-bold text-slate-800">📨 คำถามส่วนตัวถึงแอดมิน</p>
             <p className="text-xs text-slate-400">แตะเพื่อไปตอบในแท็บถาม-ตอบ → ส่วนตัว</p>
           </div>
           <Badge color={privateCount ? 'red' : 'slate'}>{privateCount}</Badge>
@@ -299,17 +302,17 @@ export default function Admin() {
       </Link>
 
       {/* เพิ่มข้อสอบ */}
-      <h2 ref={formRef} className="mb-2 scroll-mt-4 text-base font-semibold text-slate-200">
+      <h2 ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
         {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '➕ เพิ่มคำถามเข้าชุดเดิม'}
       </h2>
       <Card className="mb-3 space-y-3">
         {/* เลือกปลายทาง: ชุดใหม่ หรือชุดเดิม */}
         <div>
-          <label className="text-xs text-slate-400">เพิ่มคำถามไปไว้ที่</label>
+          <label className="text-xs font-medium text-slate-500">เพิ่มคำถามไปไว้ที่</label>
           <select
             value={targetSetId}
             onChange={(e) => pickTarget(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
+            className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
           >
             <option value="">➕ สร้างชุดใหม่</option>
             {sets.map((s) => (
@@ -325,38 +328,38 @@ export default function Admin() {
           <>
             <div className="flex gap-2">
               <div className="w-24">
-                <label className="text-xs text-slate-400">วันที่</label>
+                <label className="text-xs font-medium text-slate-500">วันที่</label>
                 <input
                   type="number"
                   min={1}
                   value={dayNumber}
                   onChange={(e) => setDayNumber(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-slate-400">ชื่อชุด</label>
+                <label className="text-xs font-medium text-slate-500">ชื่อชุด</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={`ชุดข้อสอบวันที่ ${dayNumber}`}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
                 />
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
               <input
                 type="checkbox"
                 checked={publish}
                 onChange={(e) => setPublish(e.target.checked)}
-                className="h-4 w-4 accent-indigo-500"
+                className="h-4 w-4 accent-violet-500"
               />
               เผยแพร่ทันที (ผู้ใช้เห็น + แจ้งเตือนข้อสอบใหม่)
             </label>
           </>
         )}
         {!isNewSet && (
-          <p className="rounded-lg bg-slate-800/60 p-2 text-xs text-slate-300">
+          <p className="rounded-xl bg-violet-50 p-2.5 text-xs text-violet-700">
             กำลังเพิ่มคำถามต่อท้ายชุดที่เลือก — เพิ่มทีละข้อ หรือหลายข้อก็ได้ บันทึกแล้วฟอร์มจะพร้อมให้พิมพ์ข้อถัดไปทันที
           </p>
         )}
@@ -376,15 +379,15 @@ export default function Admin() {
 
       <button
         onClick={addQ}
-        className="mt-3 w-full rounded-xl border border-dashed border-slate-700 py-3 text-sm text-slate-400 hover:bg-slate-800"
+        className="mt-3 w-full rounded-2xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50"
       >
         + เพิ่มคำถาม
       </button>
 
       {msg && (
         <p
-          className={`mt-3 text-sm ${
-            msg.startsWith('✅') ? 'text-emerald-400' : 'text-rose-400'
+          className={`mt-3 text-sm font-semibold ${
+            msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'
           }`}
         >
           {msg}
@@ -400,43 +403,43 @@ export default function Admin() {
       </Button>
 
       {/* ชุดที่มีอยู่ */}
-      <h2 className="mb-2 mt-6 text-base font-semibold text-slate-200">📚 ชุดข้อสอบที่มีอยู่</h2>
+      <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">📚 ชุดข้อสอบที่มีอยู่</h2>
       {sets.length === 0 ? (
-        <p className="text-sm text-slate-500">ยังไม่มีชุดข้อสอบ</p>
+        <p className="text-sm text-slate-400">ยังไม่มีชุดข้อสอบ</p>
       ) : (
         <div className="space-y-2">
           {sets.map((s) => (
             <Card key={s.id} className="flex items-center justify-between">
               <div className="min-w-0">
-                <p className="truncate font-medium text-white">
+                <p className="truncate font-bold text-slate-800">
                   วันที่ {s.day_number} · {s.title}
                 </p>
                 <p className="text-xs text-slate-400">
                   {s.question_count} ข้อ ·{' '}
                   {s.published ? (
-                    <span className="text-emerald-400">เผยแพร่แล้ว</span>
+                    <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
                   ) : (
-                    <span className="text-amber-400">ฉบับร่าง</span>
+                    <span className="font-semibold text-amber-600">ฉบับร่าง</span>
                   )}
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">
                 <button
                   onClick={() => pickTarget(s.id)}
-                  className="rounded-lg bg-indigo-600/30 px-2 py-1 text-xs text-indigo-200"
+                  className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
                   title="เพิ่มคำถามเข้าชุดนี้"
                 >
                   + เพิ่มข้อ
                 </button>
                 <button
                   onClick={() => togglePublish(s)}
-                  className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200"
+                  className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
                 >
                   {s.published ? 'ซ่อน' : 'เผยแพร่'}
                 </button>
                 <button
                   onClick={() => removeSet(s)}
-                  className="rounded-lg bg-rose-900/40 px-2 py-1 text-xs text-rose-300"
+                  className="rounded-lg bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-200"
                 >
                   ลบ
                 </button>
@@ -447,17 +450,17 @@ export default function Admin() {
       )}
 
       {/* จัดการผู้ใช้ */}
-      <h2 className="mb-2 mt-6 text-base font-semibold text-slate-200">
+      <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">
         👥 ผู้ใช้ ({users.length})
       </h2>
       {users.length === 0 ? (
-        <p className="text-sm text-slate-500">ยังไม่มีผู้ใช้</p>
+        <p className="text-sm text-slate-400">ยังไม่มีผู้ใช้</p>
       ) : (
         <div className="space-y-2">
           {users.map((u) => (
             <Card key={u.id} className="flex items-center justify-between">
               <div className="min-w-0">
-                <p className="truncate font-medium text-white">
+                <p className="truncate font-bold text-slate-800">
                   {u.username}{' '}
                   {u.suspended && <Badge color="red">ถูกระงับ</Badge>}
                 </p>
@@ -469,8 +472,8 @@ export default function Admin() {
                 onClick={() => toggleSuspend(u)}
                 className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
                   u.suspended
-                    ? 'bg-emerald-600/30 text-emerald-200'
-                    : 'bg-rose-900/40 text-rose-300'
+                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                    : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
                 }`}
               >
                 {u.suspended ? 'ปลดระงับ' : '🚫 ระงับ'}

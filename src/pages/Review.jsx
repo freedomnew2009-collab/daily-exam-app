@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Spinner, Button, Badge, Empty } from '../components/ui'
+import { Spinner, Badge, Empty } from '../components/ui'
 
 export default function Review() {
   const { setId } = useParams()
@@ -40,39 +40,63 @@ export default function Review() {
     return <Empty icon="🔒" title="ยังไม่มีเฉลย" hint="ทำข้อสอบก่อนนะ" />
 
   const { score, total, items } = data
+  const pct = total ? score / total : 0
+  const cheer =
+    pct === 1
+      ? { emoji: '🏆', text: 'เพอร์เฟกต์! เก่งมาก ๆ เลย' }
+      : pct >= 0.8
+        ? { emoji: '🎉', text: 'ยอดเยี่ยมมาก!' }
+        : pct >= 0.5
+          ? { emoji: '💪', text: 'ทำได้ดี ลองอีกครั้งได้นะ' }
+          : { emoji: '🌱', text: 'ไม่เป็นไร ค่อย ๆ เก่งขึ้นได้!' }
 
   return (
     <div className="px-4 pt-4">
-      <button onClick={() => navigate('/')} className="mb-2 text-sm text-slate-400 underline">
+      <button
+        onClick={() => navigate('/')}
+        className="mb-3 rounded-lg bg-white/70 px-3 py-1.5 text-sm font-semibold text-violet-600 shadow-sm"
+      >
         ← กลับหน้าหลัก
       </button>
 
       {/* สรุปคะแนน */}
-      <div className="mb-4 rounded-2xl border border-slate-800 bg-gradient-to-br from-indigo-700/30 to-slate-900 p-5 text-center">
-        <p className="text-sm text-slate-300">คะแนนล่าสุดของคุณ</p>
-        <p className="mt-1 text-4xl font-extrabold text-white">
+      <div className="animate-pop mb-4 rounded-3xl bg-gradient-to-br from-violet-500 to-indigo-500 p-6 text-center text-white shadow-xl shadow-violet-300/50">
+        <div className="animate-float text-5xl">{cheer.emoji}</div>
+        <p className="mt-2 text-sm text-white/80">คะแนนล่าสุดของคุณ</p>
+        <p className="mt-1 text-5xl font-extrabold">
           {score}
-          <span className="text-xl text-slate-400">/{total}</span>
+          <span className="text-2xl text-white/70">/{total}</span>
         </p>
-        <div className="mt-2 flex justify-center gap-2">
-          <Button variant="outline" onClick={() => navigate(`/quiz/${setId}`)}>
-            ทำใหม่อีกครั้ง
-          </Button>
+        <p className="mt-1 text-sm font-semibold text-white/90">{cheer.text}</p>
+        <div className="mt-4 flex justify-center gap-2">
+          <button
+            onClick={() => navigate(`/quiz/${setId}`)}
+            className="rounded-2xl bg-white/20 px-5 py-2.5 font-bold text-white hover:bg-white/30"
+          >
+            🔁 ทำใหม่อีกครั้ง
+          </button>
         </div>
       </div>
 
-      <h2 className="mb-3 text-base font-semibold text-slate-200">เฉลยและคำอธิบาย</h2>
+      <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
+        <span className="text-xl">📖</span> เฉลยและคำอธิบาย
+      </h2>
 
       <div className="space-y-3">
         {items.map((it, i) => {
           const correct = it.is_correct
           return (
-            <div key={it.question_id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <div
+              key={it.question_id}
+              className={`rounded-3xl border-2 bg-white/80 p-4 shadow-lg shadow-violet-200/40 backdrop-blur ${
+                correct ? 'border-emerald-200' : 'border-rose-200'
+              }`}
+            >
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400">ข้อ {i + 1}</span>
-                {correct ? <Badge color="green">ตอบถูก</Badge> : <Badge color="red">ตอบผิด</Badge>}
+                <span className="text-xs font-bold text-slate-500">ข้อ {i + 1}</span>
+                {correct ? <Badge color="green">✅ ตอบถูก</Badge> : <Badge color="red">❌ ตอบผิด</Badge>}
               </div>
-              <p className="mb-3 font-medium leading-relaxed text-white">{it.question_text}</p>
+              <p className="mb-3 font-bold leading-relaxed text-slate-800">{it.question_text}</p>
 
               <div className="space-y-1.5">
                 {(it.choices || []).map((c) => {
@@ -81,34 +105,34 @@ export default function Review() {
                   return (
                     <div
                       key={c.key}
-                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
                         isCorrect
-                          ? 'border-emerald-600/50 bg-emerald-600/15 text-emerald-200'
+                          ? 'border-emerald-300 bg-emerald-50 font-semibold text-emerald-700'
                           : isYours
-                            ? 'border-rose-600/50 bg-rose-600/10 text-rose-200'
-                            : 'border-slate-800 text-slate-300'
+                            ? 'border-rose-300 bg-rose-50 text-rose-600'
+                            : 'border-slate-100 text-slate-500'
                       }`}
                     >
                       <span className="font-bold">{c.key}</span>
                       <span className="flex-1">{c.text}</span>
                       {isCorrect && <span>✅</span>}
-                      {isYours && !isCorrect && <span>← คุณเลือก</span>}
+                      {isYours && !isCorrect && <span className="text-xs">← คุณเลือก</span>}
                     </div>
                   )
                 })}
               </div>
 
               {it.your_reason && (
-                <div className="mt-3 rounded-lg bg-slate-800/60 p-3 text-sm">
-                  <p className="mb-0.5 text-xs font-semibold text-slate-400">เหตุผลที่คุณตอบ</p>
-                  <p className="text-slate-200">{it.your_reason}</p>
+                <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">
+                  <p className="mb-0.5 text-xs font-bold text-slate-400">เหตุผลที่คุณตอบ</p>
+                  <p className="text-slate-600">{it.your_reason}</p>
                 </div>
               )}
 
               {it.explanation && (
-                <div className="mt-3 rounded-lg border border-indigo-700/40 bg-indigo-600/10 p-3 text-sm">
-                  <p className="mb-0.5 text-xs font-semibold text-indigo-300">💡 คำอธิบาย / เฉลย</p>
-                  <p className="leading-relaxed text-slate-100">{it.explanation}</p>
+                <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">
+                  <p className="mb-0.5 text-xs font-bold text-violet-600">💡 คำอธิบาย / เฉลย</p>
+                  <p className="leading-relaxed text-slate-700">{it.explanation}</p>
                 </div>
               )}
             </div>

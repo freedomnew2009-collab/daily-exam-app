@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -12,8 +12,9 @@ body,
 
 body {
   margin: 0;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: linear-gradient(160deg, #eef2ff 0%, #faf5ff 45%, #fff1f2 100%);
+  background-attachment: fixed;
+  color: #1e293b;
   font-family: 'Sarabun', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
@@ -22,10 +23,14 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ปรากฏแบบเด้งสนุก ๆ */
 @keyframes pop {
   0% {
-    transform: scale(0.96);
+    transform: scale(0.94);
     opacity: 0;
+  }
+  60% {
+    transform: scale(1.02);
   }
   100% {
     transform: scale(1);
@@ -33,5 +38,51 @@ body {
   }
 }
 .animate-pop {
-  animation: pop 0.15s ease-out;
+  animation: pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* เลื่อนขึ้นมาเบา ๆ */
+@keyframes rise {
+  0% {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-rise {
+  animation: rise 0.35s ease-out both;
+}
+
+/* ลอยขึ้นลงน่ารัก ๆ สำหรับไอคอน */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ส่ายหัวเล็กน้อย */
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-7deg);
+  }
+  75% {
+    transform: rotate(7deg);
+  }
+}
+.animate-wiggle {
+  animation: wiggle 0.6s ease-in-out;
 }

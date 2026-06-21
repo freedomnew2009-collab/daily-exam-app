@@ -5,6 +5,13 @@ import { supabase, isConfigured } from '../lib/supabase'
 import { getLastSeen, setLastSeen } from '../lib/notify'
 import { Spinner, Button, Card, Badge, Empty } from '../components/ui'
 
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'เช้า'
+  if (h < 17) return 'บ่าย'
+  return 'เย็น'
+}
+
 export default function Home({ onSeen }) {
   const { user, logoutUser, adminSignOut, isAdmin } = useStore()
   const navigate = useNavigate()
@@ -63,22 +70,24 @@ export default function Home({ onSeen }) {
   return (
     <div className="px-4 pt-4">
       {/* หัวข้อ + ผู้ใช้ */}
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-slate-400">สวัสดี</p>
-          <p className="text-lg font-bold text-white">
+      <header className="animate-rise mb-5 flex items-center justify-between rounded-3xl bg-gradient-to-r from-violet-500 to-indigo-500 p-4 text-white shadow-lg shadow-violet-300/50">
+        <div className="min-w-0">
+          <p className="text-xs text-white/80">สวัสดีตอน{greeting()} 👋</p>
+          <p className="flex items-center gap-2 truncate text-lg font-bold">
             {user.username} {isAdmin && <Badge color="amber">แอดมิน</Badge>}
           </p>
         </div>
         <button
           onClick={logoutAll}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+          className="flex-shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/30"
         >
-          ↩ ออกจากระบบ
+          ↩ ออก
         </button>
       </header>
 
-      <h2 className="mb-3 text-base font-semibold text-slate-200">ชุดข้อสอบ</h2>
+      <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
+        <span className="text-xl">🗂️</span> ชุดข้อสอบของวันนี้
+      </h2>
 
       {sets.length === 0 ? (
         <Empty
@@ -93,26 +102,29 @@ export default function Home({ onSeen }) {
             const done = a && a.count > 0
             const isNew = new Date(s.created_at) > new Date(lastSeenAtLoad)
             return (
-              <Card key={s.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-indigo-300">วันที่ {s.day_number}</span>
-                      {isNew && <Badge color="red">ใหม่</Badge>}
+              <Card key={s.id} className="animate-rise overflow-hidden">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 text-violet-600">
+                    <span className="text-[9px] font-semibold leading-none">วันที่</span>
+                    <span className="text-lg font-extrabold leading-tight">{s.day_number}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isNew && <Badge color="red">✨ ใหม่</Badge>}
                       {done && (
                         <Badge color="green">
-                          คะแนนสูงสุด {a.best}/{a.total ?? s.question_count}
+                          🏆 สูงสุด {a.best}/{a.total ?? s.question_count}
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-0.5 truncate font-medium text-white">{s.title || 'ชุดข้อสอบ'}</p>
-                    <p className="text-xs text-slate-400">{s.question_count ?? 5} ข้อ</p>
+                    <p className="mt-0.5 truncate font-bold text-slate-800">{s.title || 'ชุดข้อสอบ'}</p>
+                    <p className="text-xs text-slate-400">{s.question_count ?? 5} ข้อ · ลุยกันเลย!</p>
                   </div>
                 </div>
 
                 <div className="mt-3 flex gap-2">
                   <Button className="flex-1" onClick={() => navigate(`/quiz/${s.id}`)}>
-                    {done ? 'ทำใหม่' : 'เริ่มทำข้อสอบ'}
+                    {done ? '🔁 ทำใหม่' : '🚀 เริ่มทำข้อสอบ'}
                   </Button>
                   <Button
                     variant={done ? 'outline' : 'ghost'}
@@ -121,7 +133,7 @@ export default function Home({ onSeen }) {
                     onClick={() => done && navigate(`/review/${s.id}`)}
                     title={done ? '' : 'ต้องทำข้อสอบก่อนถึงดูเฉลยได้'}
                   >
-                    {done ? 'ดูเฉลย' : '🔒 ดูเฉลย'}
+                    {done ? '📖 ดูเฉลย' : '🔒 ดูเฉลย'}
                   </Button>
                 </div>
               </Card>
@@ -130,7 +142,7 @@ export default function Home({ onSeen }) {
         </div>
       )}
 
-      <p className="mt-6 text-center text-xs text-slate-500">
+      <p className="mt-6 text-center text-xs text-slate-400">
         🔒 ดูเฉลยได้หลังจากทำข้อสอบชุดนั้นแล้วอย่างน้อย 1 ครั้ง
       </p>
     </div>

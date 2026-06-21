@@ -26,56 +26,56 @@ function Thread({ thread, isAdmin, currentUserId, onReply, onDeleteThread, onDel
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+    <div className="animate-rise rounded-3xl border border-white bg-white/80 p-4 shadow-lg shadow-violet-200/40 backdrop-blur">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <Badge color={thread.is_public ? 'indigo' : 'amber'}>
           {thread.is_public ? '🌐 สาธารณะ' : '🔒 Private'}
         </Badge>
         {!thread.is_public && (
-          <span className="text-[11px] text-amber-300/80">เห็นเฉพาะคุณกับแอดมิน</span>
+          <span className="text-[11px] text-amber-600">เห็นเฉพาะคุณกับแอดมิน</span>
         )}
         {/* ไม่ระบุชื่อผู้ถามในโหมดสาธารณะ */}
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-400">
           {thread.is_public ? 'ไม่ระบุชื่อ' : isAdmin ? thread.username || 'ผู้ใช้' : 'คุณ'} ·{' '}
           {timeAgo(thread.created_at)}
         </span>
         {isAdmin && (
           <button
             onClick={() => onDeleteThread(thread.id)}
-            className="ml-auto rounded-lg bg-rose-900/40 px-2 py-0.5 text-xs text-rose-300 hover:bg-rose-900/60"
+            className="ml-auto rounded-lg bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-600 hover:bg-rose-200"
             title="ลบกระทู้นี้ทั้งหมด"
           >
             🗑 ลบ
           </button>
         )}
       </div>
-      <p className="leading-relaxed text-white">{thread.body}</p>
+      <p className="leading-relaxed text-slate-800">{thread.body}</p>
 
       {/* คำตอบ */}
       {thread.replies?.length > 0 && (
-        <div className="mt-3 space-y-2 border-l-2 border-slate-700 pl-3">
+        <div className="mt-3 space-y-2 border-l-2 border-violet-200 pl-3">
           {thread.replies.map((r) => (
             <div key={r.id}>
               <div className="flex items-center gap-2">
                 {r.is_admin ? (
                   <Badge color="green">👑 แอดมิน</Badge>
                 ) : (
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-400">
                     {thread.is_public ? 'ไม่ระบุชื่อ' : 'ตอบกลับ'}
                   </span>
                 )}
-                <span className="text-xs text-slate-600">{timeAgo(r.created_at)}</span>
+                <span className="text-xs text-slate-400">{timeAgo(r.created_at)}</span>
                 {isAdmin && (
                   <button
                     onClick={() => onDeleteReply(r.id)}
-                    className="ml-auto text-xs text-rose-400 hover:underline"
+                    className="ml-auto text-xs font-semibold text-rose-500 hover:underline"
                     title="ลบคำตอบนี้"
                   >
                     🗑 ลบ
                   </button>
                 )}
               </div>
-              <p className="mt-0.5 text-sm leading-relaxed text-slate-200">{r.body}</p>
+              <p className="mt-0.5 text-sm leading-relaxed text-slate-600">{r.body}</p>
             </div>
           ))}
         </div>
@@ -90,17 +90,17 @@ function Thread({ thread, isAdmin, currentUserId, onReply, onDeleteThread, onDel
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder={isAdmin ? 'ตอบในนามแอดมิน…' : 'ร่วมตอบ…'}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                className="flex-1 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
                 onKeyDown={(e) => e.key === 'Enter' && send()}
               />
-              <Button onClick={send} disabled={busy} className="px-3 py-2 text-sm">
+              <Button onClick={send} disabled={busy} className="px-4 py-2 text-sm">
                 ส่ง
               </Button>
             </div>
           ) : (
             <button
               onClick={() => setOpen(true)}
-              className="text-sm text-indigo-400 hover:underline"
+              className="text-sm font-semibold text-violet-600 hover:underline"
             >
               💬 ตอบกลับ
             </button>
@@ -211,36 +211,42 @@ export default function QA() {
   return (
     <div className="px-4 pt-4">
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-white">ถาม-ตอบ</h1>
+        <h1 className="flex items-center gap-2 text-xl font-extrabold text-slate-800">
+          <span className="animate-float">💬</span> ถาม-ตอบ
+        </h1>
         <button
           onClick={logoutAll}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+          className="rounded-xl border-2 border-violet-200 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"
         >
-          ↩ ออกจากระบบ
+          ↩ ออก
         </button>
       </div>
 
-      <div className="mb-4 flex rounded-xl bg-slate-800 p-1">
+      <div className="mb-4 flex rounded-2xl bg-white/70 p-1 shadow-md shadow-violet-200/40">
         <button
           onClick={() => setTab('public')}
-          className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-            tab === 'public' ? 'bg-indigo-600 text-white' : 'text-slate-300'
+          className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
+            tab === 'public'
+              ? 'bg-gradient-to-r from-violet-500 to-indigo-500 text-white shadow-md shadow-violet-300/50'
+              : 'text-slate-500'
           }`}
         >
           🌐 สาธารณะ
         </button>
         <button
           onClick={() => setTab('private')}
-          className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-            tab === 'private' ? 'bg-indigo-600 text-white' : 'text-slate-300'
+          className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
+            tab === 'private'
+              ? 'bg-gradient-to-r from-violet-500 to-indigo-500 text-white shadow-md shadow-violet-300/50'
+              : 'text-slate-500'
           }`}
         >
-          🔒 Private (ถามแอดมิน)
+          🔒 ถามแอดมิน
         </button>
       </div>
 
       {/* กล่องถาม */}
-      <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+      <div className="mb-4 rounded-3xl border border-white bg-white/80 p-3 shadow-lg shadow-violet-200/40 backdrop-blur">
         <textarea
           value={newQ}
           onChange={(e) => setNewQ(e.target.value)}
@@ -250,7 +256,7 @@ export default function QA() {
               ? 'ถามแบบสาธารณะ (ทุกคนเห็น แต่ไม่ระบุชื่อคุณ)…'
               : 'ส่งคำถามถึงแอดมินแบบส่วนตัว…'
           }
-          className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 p-2 text-sm text-white outline-none focus:border-indigo-500"
+          className="w-full resize-none rounded-2xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
         />
         <div className="mt-2 flex justify-end">
           <Button onClick={ask} disabled={posting || !newQ.trim()} className="px-4 py-2 text-sm">
