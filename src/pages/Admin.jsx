@@ -260,6 +260,74 @@ function EncourageSetting() {
   )
 }
 
+// ตั้งค่าเวลาทำข้อสอบ (นาที) — ใช้เป็นเวลานับถอยหลัง
+function QuizTimeSetting() {
+  const [mins, setMins] = useState('15')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'quiz_minutes')
+        .maybeSingle()
+      setMins(data?.value || '15')
+      setLoading(false)
+    })()
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    setMsg('')
+    const v = String(Math.max(1, Math.min(180, Number(mins) || 15)))
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'quiz_minutes', value: v, updated_at: new Date().toISOString() })
+    setMins(v)
+    setMsg(error ? '❌ ' + error.message : '✅ บันทึกแล้ว')
+    setSaving(false)
+  }
+
+  if (loading)
+    return (
+      <Card>
+        <Spinner label="กำลังโหลด…" />
+      </Card>
+    )
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs text-slate-500">
+        เวลานับถอยหลังสำหรับทำข้อสอบทั้งชุด เมื่อหมดเวลาระบบจะส่งคำตอบให้อัตโนมัติ
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={180}
+            value={mins}
+            onChange={(e) => setMins(e.target.value)}
+            className="w-24 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-center text-lg font-bold text-slate-800 outline-none focus:border-violet-400"
+          />
+          <span className="text-sm font-semibold text-slate-500">นาที</span>
+        </div>
+        <Button onClick={save} disabled={saving} className="px-4 py-2 text-sm">
+          {saving ? 'กำลังบันทึก…' : '💾 บันทึกเวลา'}
+        </Button>
+        {msg && (
+          <span className={`text-xs font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 // ตั้งค่าข้อความตามคะแนนที่ได้ (เป็น % ของคะแนนเต็ม)
 const SCORE_MSG_KEY = 'score_messages'
 const DEFAULT_SCORE_MSGS = [
@@ -567,7 +635,7 @@ function ArticlesAdmin() {
   const [editingId, setEditingId] = useState(null)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [cover, setCover] = useState('')
+  const [images, setImages] = useState([])
   const [published, setPublished] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -577,7 +645,7 @@ function ArticlesAdmin() {
     setLoading(true)
     const { data } = await supabase
       .from('articles')
-      .select('id, title, body, cover_url, published, created_at')
+      .select('id, title, body, cover_url, images, views, published, created_at')
       .order('created_at', { ascending: false })
     setList(data || [])
     setLoading(false)
@@ -591,7 +659,7 @@ function ArticlesAdmin() {
     setEditingId(null)
     setTitle('')
     setBody('')
-    setCover('')
+    setImages([])
     setPublished(true)
   }
 
@@ -599,34 +667,44 @@ function ArticlesAdmin() {
     setEditingId(a.id)
     setTitle(a.title)
     setBody(a.body)
-    setCover(a.cover_url || '')
+    const imgs = Array.isArray(a.images) && a.images.length ? a.images : a.cover_url ? [a.cover_url] : []
+    setImages(imgs)
     setPublished(a.published)
     setMsg('')
   }
 
-  const onPickCover = async (e) => {
-    const file = e.target.files?.[0]
+  const onPickImages = async (e) => {
+    const files = Array.from(e.target.files || [])
     e.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) return setMsg('⚠️ ไฟล์ต้องเป็นรูปภาพ')
-    if (file.size > 5 * 1024 * 1024) return setMsg('⚠️ รูปต้องไม่เกิน 5MB')
+    if (!files.length) return
     setMsg('')
     setUploading(true)
     try {
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-      const path = `articles/${crypto.randomUUID()}.${ext}`
-      const { error } = await supabase.storage
-        .from('question-images')
-        .upload(path, file, { contentType: file.type, upsert: false })
-      if (error) throw error
-      const { data } = supabase.storage.from('question-images').getPublicUrl(path)
-      setCover(data.publicUrl)
+      const urls = []
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue
+        if (file.size > 5 * 1024 * 1024) {
+          setMsg('⚠️ ข้ามรูปที่ใหญ่เกิน 5MB บางรูป')
+          continue
+        }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+        const path = `articles/${crypto.randomUUID()}.${ext}`
+        const { error } = await supabase.storage
+          .from('question-images')
+          .upload(path, file, { contentType: file.type, upsert: false })
+        if (error) throw error
+        const { data } = supabase.storage.from('question-images').getPublicUrl(path)
+        urls.push(data.publicUrl)
+      }
+      setImages((prev) => [...prev, ...urls])
     } catch (err) {
       setMsg('❌ อัปโหลดรูปไม่สำเร็จ: ' + (err.message || ''))
     } finally {
       setUploading(false)
     }
   }
+
+  const removeImage = (url) => setImages((prev) => prev.filter((u) => u !== url))
 
   const save = async () => {
     if (!title.trim() || !body.trim()) {
@@ -635,7 +713,13 @@ function ArticlesAdmin() {
     }
     setSaving(true)
     setMsg('')
-    const row = { title: title.trim(), body: body.trim(), cover_url: cover || null, published }
+    const row = {
+      title: title.trim(),
+      body: body.trim(),
+      images,
+      cover_url: images[0] || null,
+      published,
+    }
     let error
     if (editingId) {
       ;({ error } = await supabase
@@ -687,24 +771,39 @@ function ArticlesAdmin() {
           className="w-full resize-y rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
         />
 
-        {/* รูปปก */}
-        {cover ? (
-          <div className="relative">
-            <img src={cover} alt="" className="max-h-48 w-full rounded-xl border border-violet-100 object-cover" />
-            <button
-              type="button"
-              onClick={() => setCover('')}
-              className="absolute right-2 top-2 rounded-full bg-rose-500 px-2.5 py-1 text-xs font-bold text-white shadow-md"
-            >
-              ✕ ลบรูปปก
-            </button>
+        {/* รูปประกอบ (ใส่ได้หลายรูป — รูปแรกเป็นปก) */}
+        {images.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {images.map((url, i) => (
+              <div key={url} className="relative">
+                <img src={url} alt="" className="h-24 w-full rounded-lg border border-violet-100 object-cover" />
+                {i === 0 && (
+                  <span className="absolute left-1 top-1 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    ปก
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeImage(url)}
+                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white shadow"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
-        ) : (
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50">
-            {uploading ? '⏳ กำลังอัปโหลด…' : '🖼️ เพิ่มรูปปก (ไม่บังคับ)'}
-            <input type="file" accept="image/*" onChange={onPickCover} disabled={uploading} className="hidden" />
-          </label>
         )}
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50">
+          {uploading ? '⏳ กำลังอัปโหลด…' : images.length ? '➕ เพิ่มรูปอีก' : '🖼️ เพิ่มรูปประกอบ (เลือกได้หลายรูป)'}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onPickImages}
+            disabled={uploading}
+            className="hidden"
+          />
+        </label>
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
           <input
@@ -751,7 +850,7 @@ function ArticlesAdmin() {
                   ) : (
                     <span className="font-semibold text-amber-600">ฉบับร่าง</span>
                   )}{' '}
-                  · {new Date(a.created_at).toLocaleDateString('th-TH')}
+                  · 👁 {a.views ?? 0} ครั้ง · {new Date(a.created_at).toLocaleDateString('th-TH')}
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">
@@ -782,8 +881,40 @@ function ArticlesAdmin() {
   )
 }
 
+// รายการเมนูในแถบด้านข้างของหน้าแอดมิน (เลื่อนไปยังแต่ละส่วน)
+const ADMIN_SECTIONS = [
+  { id: 'sec-add', label: '➕ เพิ่มข้อสอบ' },
+  { id: 'sec-time', label: '⏱ เวลาทำข้อสอบ' },
+  { id: 'sec-encourage', label: '💛 ข้อความให้กำลังใจ' },
+  { id: 'sec-score', label: '🎯 ข้อความตามคะแนน' },
+  { id: 'sec-qa', label: '💬 ข้อความช่องถาม-ตอบ' },
+  { id: 'sec-articles', label: '📰 บทความความรู้' },
+  { id: 'sec-sets', label: '📚 ชุดข้อสอบที่มีอยู่' },
+  { id: 'sec-results', label: '📊 ผลตรวจ' },
+  { id: 'sec-users', label: '👥 ผู้ใช้' },
+]
+
 export default function Admin() {
   const { isAdmin, adminEmail, adminSignOut } = useStore()
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const touchRef = useRef({ x: 0, y: 0 })
+
+  const onTouchStart = (e) => {
+    const t = e.touches[0]
+    touchRef.current = { x: t.clientX, y: t.clientY }
+  }
+  const onTouchEnd = (e) => {
+    const t = e.changedTouches[0]
+    const dx = t.clientX - touchRef.current.x
+    const dy = t.clientY - touchRef.current.y
+    if (Math.abs(dy) > Math.abs(dx)) return // เลื่อนแนวตั้ง = อ่าน ไม่ใช่เปิดเมนู
+    if (!drawerOpen && touchRef.current.x < 30 && dx > 60) setDrawerOpen(true)
+    else if (drawerOpen && dx < -60) setDrawerOpen(false)
+  }
+  const goSection = (secId) => {
+    setDrawerOpen(false)
+    setTimeout(() => document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+  }
   const [sets, setSets] = useState([])
   const [users, setUsers] = useState([])
   const [privateCount, setPrivateCount] = useState(0)
@@ -929,10 +1060,48 @@ export default function Admin() {
     load()
   }
 
+  const editCategory = async (s) => {
+    const v = prompt(`หมวดของ "วันที่ ${s.day_number} · ${s.title || ''}"`, s.category || '')
+    if (v === null) return // กดยกเลิก
+    await supabase.from('exam_sets').update({ category: v.trim() || null }).eq('id', s.id)
+    load()
+  }
+
   return (
-    <div className="px-4 pt-4 pb-6">
-      <header className="mb-4 flex items-center justify-between rounded-3xl bg-gradient-to-r from-violet-500 to-indigo-500 p-4 text-white shadow-lg shadow-violet-300/50">
-        <div className="min-w-0">
+    <div className="px-4 pt-4 pb-6" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {/* เมนูด้านข้าง — ปัดจากขอบซ้าย หรือกดปุ่ม ☰ */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setDrawerOpen(false)}>
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+          <div
+            className="animate-slide-left absolute left-0 top-0 h-full w-64 max-w-[80%] overflow-y-auto bg-white p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 text-base font-extrabold text-violet-700">🛠️ เมนูแอดมิน</p>
+            <div className="space-y-1">
+              {ADMIN_SECTIONS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => goSection(m.id)}
+                  className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-violet-50"
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <header className="mb-4 flex items-center gap-2 rounded-3xl bg-gradient-to-r from-violet-500 to-indigo-500 p-4 text-white shadow-lg shadow-violet-300/50">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="flex-shrink-0 rounded-xl bg-white/20 px-3 py-2 text-lg leading-none text-white hover:bg-white/30"
+          title="เปิดเมนู"
+        >
+          ☰
+        </button>
+        <div className="min-w-0 flex-1">
           <h1 className="text-lg font-extrabold">🛠️ แผงแอดมิน</h1>
           <p className="truncate text-xs text-white/80">{adminEmail}</p>
         </div>
@@ -940,7 +1109,7 @@ export default function Admin() {
           onClick={adminSignOut}
           className="flex-shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/30"
         >
-          ออกจากแอดมิน
+          ออก
         </button>
       </header>
 
@@ -955,32 +1124,38 @@ export default function Admin() {
         </Card>
       </Link>
 
+      {/* เวลาทำข้อสอบ */}
+      <h2 id="sec-time" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">⏱ เวลาทำข้อสอบ (นับถอยหลัง)</h2>
+      <div className="mb-4">
+        <QuizTimeSetting />
+      </div>
+
       {/* ข้อความให้กำลังใจหลังทำข้อสอบ */}
-      <h2 className="mb-2 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
+      <h2 id="sec-encourage" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
       <div className="mb-4">
         <EncourageSetting />
       </div>
 
       {/* ข้อความตามคะแนนที่ได้ */}
-      <h2 className="mb-2 text-base font-bold text-slate-700">🎯 ข้อความตามคะแนนที่ได้</h2>
+      <h2 id="sec-score" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">🎯 ข้อความตามคะแนนที่ได้</h2>
       <div className="mb-4">
         <ScoreMessageSetting />
       </div>
 
       {/* ข้อความในช่องถาม-ตอบ */}
-      <h2 className="mb-2 text-base font-bold text-slate-700">💬 ข้อความในช่องถาม-ตอบ</h2>
+      <h2 id="sec-qa" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💬 ข้อความในช่องถาม-ตอบ</h2>
       <div className="mb-4">
         <QaPlaceholderSetting />
       </div>
 
       {/* บทความความรู้ */}
-      <h2 className="mb-2 text-base font-bold text-slate-700">📰 บทความความรู้</h2>
+      <h2 id="sec-articles" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">📰 บทความความรู้</h2>
       <div className="mb-4">
         <ArticlesAdmin />
       </div>
 
       {/* เพิ่มข้อสอบ */}
-      <h2 ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
+      <h2 id="sec-add" ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
         {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '➕ เพิ่มคำถามเข้าชุดเดิม'}
       </h2>
       <Card className="mb-3 space-y-3">
@@ -1098,7 +1273,7 @@ export default function Admin() {
       </Button>
 
       {/* ชุดที่มีอยู่ */}
-      <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">📚 ชุดข้อสอบที่มีอยู่</h2>
+      <h2 id="sec-sets" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">📚 ชุดข้อสอบที่มีอยู่</h2>
       {sets.length === 0 ? (
         <p className="text-sm text-slate-400">ยังไม่มีชุดข้อสอบ</p>
       ) : (
@@ -1130,6 +1305,13 @@ export default function Admin() {
                   + เพิ่มข้อ
                 </button>
                 <button
+                  onClick={() => editCategory(s)}
+                  className="rounded-lg bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-200"
+                  title="ตั้ง/แก้หมวดของชุดนี้"
+                >
+                  🏷️ หมวด
+                </button>
+                <button
                   onClick={() => togglePublish(s)}
                   className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
                 >
@@ -1148,11 +1330,11 @@ export default function Admin() {
       )}
 
       {/* ผลตรวจ + เหตุผลผู้ตอบ */}
-      <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
+      <h2 id="sec-results" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
       <ExamResults sets={sets} />
 
       {/* จัดการผู้ใช้ */}
-      <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">
+      <h2 id="sec-users" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">
         👥 ผู้ใช้ ({users.length})
       </h2>
       {users.length === 0 ? (

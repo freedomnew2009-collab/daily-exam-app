@@ -16,35 +16,84 @@ export default function Quiz() {
   const [responses, setResponses] = useState({}) // qid -> { selected, reason }
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState('')
-  const [elapsed, setElapsed] = useState(0) // วินาทีที่ใช้ไปทั้งชุด
+  const [totalSeconds, setTotalSeconds] = useState(15 * 60) // เวลาทั้งหมด (แอดมินตั้งได้)
+  const [remaining, setRemaining] = useState(null) // วินาทีที่เหลือ (นับถอยหลัง)
   const startRef = useRef(null)
+  const submitRef = useRef(null)
+  const submittedRef = useRef(false)
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
-      const [{ data: set }, { data: qs }] = await Promise.all([
+      const [{ data: set }, { data: qs }, { data: setting }] = await Promise.all([
         supabase.from('exam_sets').select('id, day_number, title').eq('id', setId).single(),
         supabase
           .from('questions')
           .select('id, order_index, question_text, image_url, choices')
           .eq('exam_set_id', setId)
           .order('order_index', { ascending: true }),
+        supabase.from('app_settings').select('value').eq('key', 'quiz_minutes').maybeSingle(),
       ])
+      const mins = Math.max(1, Number(setting?.value) || 15)
+      setTotalSeconds(mins * 60)
+      setRemaining(mins * 60)
       setExamSet(set)
       setQuestions(qs || [])
       setLoading(false)
     })()
   }, [setId])
 
-  // เริ่มจับเวลาทั้งชุดเมื่อโหลดคำถามเสร็จ
+  // นับถอยหลังเมื่อโหลดคำถามเสร็จ — หมดเวลาแล้วส่งอัตโนมัติ
   useEffect(() => {
     if (loading || !questions.length) return
     startRef.current = Date.now()
+    setRemaining(totalSeconds)
     const t = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+      const left = totalSeconds - Math.floor((Date.now() - startRef.current) / 1000)
+      if (left <= 0) {
+        clearInterval(t)
+        setRemaining(0)
+        submitRef.current?.()
+      } else {
+        setRemaining(left)
+      }
     }, 1000)
     return () => clearInterval(t)
-  }, [loading, questions.length])
+  }, [loading, questions.length, totalSeconds])
+
+  const submit = async () => {
+    if (submittedRef.current) return // กันส่งซ้ำ (เช่น หมดเวลา + กดส่งพร้อมกัน)
+    submittedRef.current = true
+    setErr('')
+    setSubmitting(true)
+    try {
+      const payload = questions.map((qq) => ({
+        question_id: qq.id,
+        selected_choice: responses[qq.id]?.selected || null,
+        reason: responses[qq.id]?.reason?.trim() || null,
+      }))
+      const duration = startRef.current
+        ? Math.min(totalSeconds, Math.floor((Date.now() - startRef.current) / 1000))
+        : 0
+      const { data, error } = await supabase.rpc('submit_attempt', {
+        p_user_id: user.id,
+        p_exam_set_id: setId,
+        p_answers: payload,
+        p_duration: duration,
+      })
+      if (error) throw error
+      // data = { attempt_id, score, total }
+      navigate(`/review/${setId}`, { replace: true, state: { justFinished: data } })
+    } catch (e) {
+      submittedRef.current = false
+      setErr(e.message || 'ส่งคำตอบไม่สำเร็จ')
+      setSubmitting(false)
+    }
+  }
+  // เก็บ submit ล่าสุดไว้ใน ref เพื่อให้ตัวจับเวลาเรียกได้ตอนหมดเวลา
+  useEffect(() => {
+    submitRef.current = submit
+  })
 
   if (loading) return <Spinner />
   if (!questions.length)
@@ -58,35 +107,34 @@ export default function Quiz() {
   const setResp = (patch) =>
     setResponses((prev) => ({ ...prev, [q.id]: { ...resp, ...patch } }))
 
-  const submit = async () => {
-    setErr('')
-    setSubmitting(true)
-    try {
-      const payload = questions.map((qq) => ({
-        question_id: qq.id,
-        selected_choice: responses[qq.id]?.selected || null,
-        reason: responses[qq.id]?.reason?.trim() || null,
-      }))
-      const duration = startRef.current
-        ? Math.floor((Date.now() - startRef.current) / 1000)
-        : 0
-      const { data, error } = await supabase.rpc('submit_attempt', {
-        p_user_id: user.id,
-        p_exam_set_id: setId,
-        p_answers: payload,
-        p_duration: duration,
-      })
-      if (error) throw error
-      // data = { attempt_id, score, total }
-      navigate(`/review/${setId}`, { replace: true, state: { justFinished: data } })
-    } catch (e) {
-      setErr(e.message || 'ส่งคำตอบไม่สำเร็จ')
-      setSubmitting(false)
-    }
-  }
-
   return (
     <div className="flex min-h-[calc(100vh-60px)] flex-col px-4 pt-3">
+      {/* นาฬิกานับถอยหลัง — ตัวเลขใหญ่เห็นชัด */}
+      {(() => {
+        const left = remaining ?? totalSeconds
+        const low = left <= 60
+        return (
+          <div
+            className={`mb-3 flex flex-col items-center rounded-2xl border-2 py-2.5 ${
+              low
+                ? 'animate-pop border-rose-200 bg-rose-50'
+                : 'border-violet-100 bg-white/80'
+            }`}
+          >
+            <span className={`text-xs font-bold ${low ? 'text-rose-500' : 'text-slate-400'}`}>
+              {low ? '⏰ ใกล้หมดเวลาแล้ว!' : '⏱ เวลาที่เหลือ'}
+            </span>
+            <span
+              className={`text-5xl font-extrabold tabular-nums leading-tight ${
+                low ? 'text-rose-600' : 'text-violet-700'
+              }`}
+            >
+              {formatDuration(left)}
+            </span>
+          </div>
+        )
+      })()}
+
       {/* แถบความคืบหน้า */}
       <div className="mb-4">
         <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
@@ -96,9 +144,6 @@ export default function Quiz() {
           >
             ← ออก
           </button>
-          <span className="inline-flex items-center gap-1 rounded-lg bg-violet-100 px-2 py-1 font-bold text-violet-700 tabular-nums">
-            ⏱ {formatDuration(elapsed)}
-          </span>
           <span className="flex-shrink-0">
             ข้อ {idx + 1}/{questions.length} · ตอบ {answeredCount} ✅
           </span>

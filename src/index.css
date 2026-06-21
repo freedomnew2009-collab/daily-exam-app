@@ -70,6 +70,19 @@ body {
   animation: float 3s ease-in-out infinite;
 }
 
+/* เมนูเลื่อนเข้าจากซ้าย (drawer) */
+@keyframes slideLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-slide-left {
+  animation: slideLeft 0.22s ease-out;
+}
+
 /* ส่ายหัวเล็กน้อย */
 @keyframes wiggle {
   0%,

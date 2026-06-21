@@ -106,11 +106,15 @@ create table if not exists articles (
   title text not null,
   body text not null,
   cover_url text,
+  images jsonb not null default '[]'::jsonb, -- รูปประกอบหลายรูป
+  views int not null default 0,             -- ยอดเข้าอ่าน
   published boolean not null default true,
   created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table articles add column if not exists images jsonb not null default '[]'::jsonb;
+alter table articles add column if not exists views int not null default 0;
 
 create index if not exists idx_questions_set on questions(exam_set_id);
 create index if not exists idx_attempts_user on attempts(user_id, exam_set_id);
@@ -451,6 +455,16 @@ grant execute on function get_private_threads(uuid) to anon, authenticated;
 grant execute on function submit_attempt(uuid, uuid, jsonb, int) to anon, authenticated;
 grant execute on function get_review(uuid, uuid) to anon, authenticated;
 grant execute on function get_exam_results(uuid) to authenticated;
+
+-- เพิ่มยอดเข้าอ่านบทความ +1
+create or replace function increment_article_views(p_id uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update articles set views = views + 1 where id = p_id and published = true;
+end;
+$$;
+grant execute on function increment_article_views(uuid) to anon, authenticated;
 
 -- ---------- ที่เก็บรูปคำถาม (Supabase Storage) ----------
 insert into storage.buckets (id, name, public)
