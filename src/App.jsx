@@ -131,7 +131,7 @@ export default function App() {
   if (!ready) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-400">
-        <div className="animate-float text-5xl">📝</div>
+        <div className="animate-float text-5xl">🎧</div>
         <span>กำลังเริ่มต้น…</span>
       </div>
     )

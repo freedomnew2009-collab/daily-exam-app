@@ -16,9 +16,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['pwa-icon.svg'],
       manifest: {
-        name: 'ข้อสอบรายวัน',
-        short_name: 'ข้อสอบ',
-        description: 'ทำข้อสอบวันละ 5 ข้อ พร้อมเฉลยและถาม-ตอบ',
+        name: 'น้องออดี้ — ติวข้อสอบ Audiology',
+        short_name: 'น้องออดี้',
+        description: 'เพื่อนซ้อมข้อสอบของชาว Audiology — ทำข้อสอบ พร้อมเฉลยและถาม-ตอบ',
         theme_color: '#a78bfa',
         background_color: '#eef2ff',
         display: 'standalone',

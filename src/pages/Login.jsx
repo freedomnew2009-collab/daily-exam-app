@@ -43,12 +43,12 @@ export default function Login() {
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
       <div className="mb-8 text-center">
         <div className="animate-float mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br from-violet-500 to-indigo-500 text-5xl shadow-xl shadow-violet-300/60">
-          📝
+          🎧
         </div>
         <h1 className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-3xl font-extrabold text-transparent">
-          ข้อสอบรายวัน
+          น้องออดี้
         </h1>
-        <p className="mt-2 text-sm text-slate-500">ทำข้อสอบวันละ 5 ข้อ พร้อมเฉลยและถาม-ตอบ 🎉</p>
+        <p className="mt-2 text-sm text-slate-500">เพื่อนซ้อมข้อสอบของชาว Audiology 🎧 ทำข้อสอบ + เฉลย + ถาม-ตอบ</p>
       </div>
 
       <div className="mb-4 flex rounded-2xl bg-white/70 p-1 shadow-md shadow-violet-200/40">
