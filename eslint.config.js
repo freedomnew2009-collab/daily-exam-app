@@ -17,5 +17,11 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      // โหลดข้อมูลใน useEffect แล้ว setState เป็น pattern ปกติของแอปนี้
+      'react-hooks/set-state-in-effect': 'off',
+      // store.jsx ตั้งใจ export ทั้ง Provider และ hook (useStore) คู่กัน
+      'react-refresh/only-export-components': 'off',
+    },
   },
 ])
