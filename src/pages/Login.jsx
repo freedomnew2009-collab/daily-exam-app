@@ -46,7 +46,7 @@ export default function Login() {
           🎧
         </div>
         <h1 className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-3xl font-extrabold text-transparent">
-          น้องออดี้
+          Audi Exam
         </h1>
         <p className="mt-2 text-sm text-slate-500">เพื่อนซ้อมข้อสอบของชาว Audiology 🎧 ทำข้อสอบ + เฉลย + ถาม-ตอบ</p>
       </div>

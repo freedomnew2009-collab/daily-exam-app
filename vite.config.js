@@ -16,8 +16,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['pwa-icon.svg'],
       manifest: {
-        name: 'น้องออดี้ — ติวข้อสอบ Audiology',
-        short_name: 'น้องออดี้',
+        name: 'Audi Exam — ติวข้อสอบ Audiology',
+        short_name: 'Audi Exam',
         description: 'เพื่อนซ้อมข้อสอบของชาว Audiology — ทำข้อสอบ พร้อมเฉลยและถาม-ตอบ',
         theme_color: '#a78bfa',
         background_color: '#eef2ff',

@@ -55,8 +55,10 @@ alter table questions add column if not exists category text;
 create table if not exists question_keys (
   question_id uuid primary key references questions(id) on delete cascade,
   correct_choice text not null,
-  explanation text
+  explanation text,
+  explanation_images jsonb not null default '[]'::jsonb -- รูปประกอบคำอธิบาย/เฉลย
 );
+alter table question_keys add column if not exists explanation_images jsonb not null default '[]'::jsonb;
 
 -- การทำข้อสอบแต่ละครั้ง
 create table if not exists attempts (
@@ -248,8 +250,9 @@ begin
             nullif(rec->>'image_url', ''), nullif(btrim(rec->>'category'), ''))
     returning id into v_q_id;
 
-    insert into question_keys(question_id, correct_choice, explanation)
-    values (v_q_id, rec->>'correct_choice', rec->>'explanation');
+    insert into question_keys(question_id, correct_choice, explanation, explanation_images)
+    values (v_q_id, rec->>'correct_choice', rec->>'explanation',
+            coalesce(rec->'explanation_images', '[]'::jsonb));
 
     v_idx := v_idx + 1;
   end loop;
@@ -279,8 +282,9 @@ begin
           nullif(p_question->>'image_url', ''), nullif(btrim(p_question->>'category'), ''))
   returning id into v_q_id;
 
-  insert into question_keys(question_id, correct_choice, explanation)
-  values (v_q_id, p_question->>'correct_choice', p_question->>'explanation');
+  insert into question_keys(question_id, correct_choice, explanation, explanation_images)
+  values (v_q_id, p_question->>'correct_choice', p_question->>'explanation',
+          coalesce(p_question->'explanation_images', '[]'::jsonb));
 
   update exam_sets set question_count = question_count + 1 where id = p_exam_set_id;
 
@@ -355,6 +359,7 @@ begin
       'choices', q.choices,
       'correct_choice', k.correct_choice,
       'explanation', k.explanation,
+      'explanation_images', coalesce(k.explanation_images, '[]'::jsonb),
       'your_choice', a.selected_choice,
       'your_reason', a.reason,
       'is_correct', coalesce(a.is_correct, false)
@@ -478,11 +483,13 @@ begin
   if exists (select 1 from question_keys where question_id = p_question_id) then
     update question_keys set
       correct_choice = p_question->>'correct_choice',
-      explanation = p_question->>'explanation'
+      explanation = p_question->>'explanation',
+      explanation_images = coalesce(p_question->'explanation_images', '[]'::jsonb)
     where question_id = p_question_id;
   else
-    insert into question_keys(question_id, correct_choice, explanation)
-    values (p_question_id, p_question->>'correct_choice', p_question->>'explanation');
+    insert into question_keys(question_id, correct_choice, explanation, explanation_images)
+    values (p_question_id, p_question->>'correct_choice', p_question->>'explanation',
+            coalesce(p_question->'explanation_images', '[]'::jsonb));
   end if;
 end;
 $$;

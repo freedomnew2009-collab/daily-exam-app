@@ -14,6 +14,7 @@ function blankQuestion() {
     choices: LETTERS.map((k) => ({ key: k, text: '' })),
     correct_choice: 'A',
     explanation: '',
+    explanation_images: [],
   }
 }
 
@@ -75,6 +76,7 @@ function AdminLogin() {
 
 function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
   const [uploading, setUploading] = useState(false)
+  const [explUploading, setExplUploading] = useState(false)
   const [imgErr, setImgErr] = useState('')
   const setField = (patch) => onChange({ ...q, ...patch })
   const setChoice = (i, text) => {
@@ -111,6 +113,41 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
       setUploading(false)
     }
   }
+
+  // รูปประกอบคำอธิบาย/เฉลย (ใส่ได้หลายรูป)
+  const explImages = Array.isArray(q.explanation_images) ? q.explanation_images : []
+  const onPickExplImages = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+    setImgErr('')
+    setExplUploading(true)
+    try {
+      const urls = []
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue
+        if (file.size > 5 * 1024 * 1024) {
+          setImgErr('ข้ามรูปที่ใหญ่เกิน 5MB บางรูป')
+          continue
+        }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+        const path = `expl/${crypto.randomUUID()}.${ext}`
+        const { error } = await supabase.storage
+          .from('question-images')
+          .upload(path, file, { contentType: file.type, upsert: false })
+        if (error) throw error
+        const { data } = supabase.storage.from('question-images').getPublicUrl(path)
+        urls.push(data.publicUrl)
+      }
+      setField({ explanation_images: [...explImages, ...urls] })
+    } catch (err) {
+      setImgErr('อัปโหลดไม่สำเร็จ: ' + (err.message || 'ลองใหม่อีกครั้ง'))
+    } finally {
+      setExplUploading(false)
+    }
+  }
+  const removeExplImage = (url) =>
+    setField({ explanation_images: explImages.filter((u) => u !== url) })
 
   return (
     <Card className="space-y-3">
@@ -210,6 +247,39 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
         onChange={(v) => setField({ explanation: v })}
         placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ) — แตะเพื่อเปิดช่องใหญ่"
       />
+
+      {/* รูปประกอบคำอธิบาย/เฉลย (ใส่ได้หลายรูป) */}
+      {explImages.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {explImages.map((url) => (
+            <div key={url} className="relative">
+              <img src={url} alt="" className="h-24 w-full rounded-lg border border-violet-100 object-cover" />
+              <button
+                type="button"
+                onClick={() => removeExplImage(url)}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white shadow"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-violet-200 py-2.5 text-sm font-semibold text-violet-500 hover:bg-violet-50">
+        {explUploading
+          ? '⏳ กำลังอัปโหลด…'
+          : explImages.length
+            ? '➕ เพิ่มรูปคำอธิบายอีก'
+            : '🖼️ เพิ่มรูปในคำอธิบาย/เฉลย (ไม่บังคับ)'}
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onPickExplImages}
+          disabled={explUploading}
+          className="hidden"
+        />
+      </label>
     </Card>
   )
 }
@@ -1118,7 +1188,7 @@ export default function Admin() {
     if (ids.length) {
       const { data: ks } = await supabase
         .from('question_keys')
-        .select('question_id, correct_choice, explanation')
+        .select('question_id, correct_choice, explanation, explanation_images')
         .in('question_id', ids)
       for (const k of ks || []) keys[k.question_id] = k
     }
@@ -1130,6 +1200,9 @@ export default function Admin() {
       choices: normalizeChoices(q.choices),
       correct_choice: keys[q.id]?.correct_choice || 'A',
       explanation: keys[q.id]?.explanation || '',
+      explanation_images: Array.isArray(keys[q.id]?.explanation_images)
+        ? keys[q.id].explanation_images
+        : [],
     }))
     setQuestions(loaded.length ? loaded : [blankQuestion()])
     setFormLoading(false)
@@ -1234,6 +1307,7 @@ export default function Admin() {
           choices: q.choices.filter((c) => c.text.trim()),
           correct_choice: q.correct_choice,
           explanation: q.explanation.trim(),
+          explanation_images: Array.isArray(q.explanation_images) ? q.explanation_images : [],
         },
       }))
 

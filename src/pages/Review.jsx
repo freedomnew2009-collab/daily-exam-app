@@ -170,10 +170,25 @@ export default function Review() {
                 </div>
               )}
 
-              {it.explanation && (
+              {(it.explanation || (it.explanation_images || []).length > 0) && (
                 <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">
                   <p className="mb-0.5 text-xs font-bold text-violet-600">💡 คำอธิบาย / เฉลย</p>
-                  <p className="leading-relaxed text-slate-700">{it.explanation}</p>
+                  {it.explanation && (
+                    <p className="whitespace-pre-wrap leading-relaxed text-slate-700">{it.explanation}</p>
+                  )}
+                  {(it.explanation_images || []).length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {it.explanation_images.map((url) => (
+                        <img
+                          key={url}
+                          src={url}
+                          alt="รูปประกอบคำอธิบาย"
+                          className="w-full rounded-xl border border-violet-100 object-contain"
+                          loading="lazy"
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
