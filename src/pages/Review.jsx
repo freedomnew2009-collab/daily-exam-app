@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Spinner, Badge, Empty } from '../components/ui'
+import { Spinner, Badge, Empty, formatDuration } from '../components/ui'
 
 export default function Review() {
   const { setId } = useParams()
@@ -39,7 +39,7 @@ export default function Review() {
   if (!data || !data.items?.length)
     return <Empty icon="🔒" title="ยังไม่มีเฉลย" hint="ทำข้อสอบก่อนนะ" />
 
-  const { score, total, items } = data
+  const { score, total, items, duration_seconds } = data
   const pct = total ? score / total : 0
   const cheer =
     pct === 1
@@ -68,6 +68,11 @@ export default function Review() {
           <span className="text-2xl text-white/70">/{total}</span>
         </p>
         <p className="mt-1 text-sm font-semibold text-white/90">{cheer.text}</p>
+        {duration_seconds > 0 && (
+          <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-sm font-bold tabular-nums">
+            ⏱ ใช้เวลา {formatDuration(duration_seconds)} นาที
+          </p>
+        )}
         <div className="mt-4 flex justify-center gap-2">
           <button
             onClick={() => navigate(`/quiz/${setId}`)}
@@ -97,6 +102,15 @@ export default function Review() {
                 {correct ? <Badge color="green">✅ ตอบถูก</Badge> : <Badge color="red">❌ ตอบผิด</Badge>}
               </div>
               <p className="mb-3 font-bold leading-relaxed text-slate-800">{it.question_text}</p>
+
+              {it.image_url && (
+                <img
+                  src={it.image_url}
+                  alt="รูปประกอบคำถาม"
+                  className="mb-3 max-h-64 w-full rounded-2xl border border-violet-100 object-contain"
+                  loading="lazy"
+                />
+              )}
 
               <div className="space-y-1.5">
                 {(it.choices || []).map((c) => {

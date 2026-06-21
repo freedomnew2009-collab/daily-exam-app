@@ -2,13 +2,14 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Button, Card, Badge, Spinner } from '../components/ui'
+import { Button, Card, Badge, Spinner, formatDuration } from '../components/ui'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 function blankQuestion() {
   return {
     question_text: '',
+    image_url: '',
     choices: LETTERS.map((k) => ({ key: k, text: '' })),
     correct_choice: 'A',
     explanation: '',
@@ -72,10 +73,42 @@ function AdminLogin() {
 }
 
 function QuestionEditor({ q, index, onChange, onRemove }) {
+  const [uploading, setUploading] = useState(false)
+  const [imgErr, setImgErr] = useState('')
   const setField = (patch) => onChange({ ...q, ...patch })
   const setChoice = (i, text) => {
     const choices = q.choices.map((c, ci) => (ci === i ? { ...c, text } : c))
     setField({ choices })
+  }
+
+  const onPickImage = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // ให้เลือกไฟล์เดิมซ้ำได้
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setImgErr('ไฟล์ต้องเป็นรูปภาพ')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImgErr('รูปต้องไม่เกิน 5MB')
+      return
+    }
+    setImgErr('')
+    setUploading(true)
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const path = `q/${crypto.randomUUID()}.${ext}`
+      const { error } = await supabase.storage
+        .from('question-images')
+        .upload(path, file, { contentType: file.type, upsert: false })
+      if (error) throw error
+      const { data } = supabase.storage.from('question-images').getPublicUrl(path)
+      setField({ image_url: data.publicUrl })
+    } catch (err) {
+      setImgErr('อัปโหลดไม่สำเร็จ: ' + (err.message || 'ลองใหม่อีกครั้ง'))
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -93,6 +126,36 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
         placeholder="โจทย์คำถาม…"
         className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
       />
+
+      {/* รูปประกอบคำถาม (ไม่บังคับ) */}
+      {q.image_url ? (
+        <div className="relative">
+          <img
+            src={q.image_url}
+            alt="รูปประกอบคำถาม"
+            className="max-h-56 w-full rounded-xl border border-violet-100 object-contain"
+          />
+          <button
+            type="button"
+            onClick={() => setField({ image_url: '' })}
+            className="absolute right-2 top-2 rounded-full bg-rose-500 px-2.5 py-1 text-xs font-bold text-white shadow-md"
+          >
+            ✕ ลบรูป
+          </button>
+        </div>
+      ) : (
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50">
+          {uploading ? '⏳ กำลังอัปโหลด…' : '🖼️ เพิ่มรูปประกอบ (ไม่บังคับ)'}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={onPickImage}
+            disabled={uploading}
+            className="hidden"
+          />
+        </label>
+      )}
+      {imgErr && <p className="text-xs font-medium text-rose-500">{imgErr}</p>}
       <div className="space-y-2">
         {q.choices.map((c, i) => (
           <div key={c.key} className="flex items-center gap-2">
@@ -127,6 +190,113 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
         placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ)…"
         className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
       />
+    </Card>
+  )
+}
+
+// ผลตรวจสำหรับแอดมิน — เลือกชุด แล้วดูคำตอบ + เหตุผลของผู้ใช้ทุกคน
+function ExamResults({ sets }) {
+  const [setId, setSetId] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [items, setItems] = useState([])
+  const [openId, setOpenId] = useState(null)
+
+  const load = async (id) => {
+    setSetId(id)
+    setItems([])
+    setOpenId(null)
+    setLoaded(false)
+    if (!id) return
+    setLoading(true)
+    const { data } = await supabase.rpc('get_exam_results', { p_exam_set_id: id })
+    setItems(data?.items || [])
+    setLoading(false)
+    setLoaded(true)
+  }
+
+  return (
+    <Card className="space-y-3">
+      <select
+        value={setId}
+        onChange={(e) => load(e.target.value)}
+        className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
+      >
+        <option value="">— เลือกชุดเพื่อดูผลตรวจ —</option>
+        {sets.map((s) => (
+          <option key={s.id} value={s.id}>
+            วันที่ {s.day_number} · {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
+          </option>
+        ))}
+      </select>
+
+      {loading && <Spinner label="กำลังโหลดผลตรวจ…" />}
+      {loaded && !loading && items.length === 0 && (
+        <p className="py-4 text-center text-sm text-slate-400">ยังไม่มีใครทำชุดนี้</p>
+      )}
+
+      {items.length > 0 && (
+        <p className="text-xs text-slate-400">มีผู้ทำทั้งหมด {items.length} ครั้ง — แตะชื่อเพื่อดูคำตอบและเหตุผล</p>
+      )}
+
+      <div className="space-y-2">
+        {items.map((a) => {
+          const open = openId === a.attempt_id
+          return (
+            <div key={a.attempt_id} className="overflow-hidden rounded-xl border border-violet-100 bg-white">
+              <button
+                onClick={() => setOpenId(open ? null : a.attempt_id)}
+                className="flex w-full items-center justify-between gap-2 p-3 text-left"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-slate-800">{a.username}</p>
+                  <p className="text-xs text-slate-400">
+                    {new Date(a.created_at).toLocaleString('th-TH')}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {a.duration_seconds > 0 && (
+                    <span className="text-xs text-slate-400 tabular-nums">
+                      ⏱ {formatDuration(a.duration_seconds)}
+                    </span>
+                  )}
+                  <Badge color={a.score === a.total ? 'green' : 'amber'}>
+                    {a.score}/{a.total}
+                  </Badge>
+                  <span className="text-xs text-slate-300">{open ? '▲' : '▼'}</span>
+                </div>
+              </button>
+
+              {open && (
+                <div className="space-y-2 border-t border-violet-100 bg-violet-50/40 p-3">
+                  {(a.answers || []).map((ans) => (
+                    <div key={ans.order_index} className="rounded-lg bg-white p-2.5 text-sm shadow-sm">
+                      <p className="font-semibold text-slate-700">
+                        ข้อ {ans.order_index + 1}. {ans.question_text}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        ตอบ:{' '}
+                        <b className={ans.is_correct ? 'text-emerald-600' : 'text-rose-600'}>
+                          {ans.selected_choice || '—'}
+                        </b>{' '}
+                        · เฉลย: <b className="text-emerald-600">{ans.correct_choice}</b>{' '}
+                        {ans.is_correct ? '✅' : '❌'}
+                      </p>
+                      {ans.reason ? (
+                        <p className="mt-1.5 rounded-md bg-violet-50 p-2 text-xs leading-relaxed text-slate-600">
+                          <b className="text-violet-600">💭 เหตุผล:</b> {ans.reason}
+                        </p>
+                      ) : (
+                        <p className="mt-1.5 text-xs italic text-slate-400">— ไม่ได้ให้เหตุผล —</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </Card>
   )
 }
@@ -225,6 +395,7 @@ export default function Admin() {
     try {
       const payload = questions.map((q) => ({
         question_text: q.question_text.trim(),
+        image_url: q.image_url || '',
         choices: q.choices.filter((c) => c.text.trim()),
         correct_choice: q.correct_choice,
         explanation: q.explanation.trim(),
@@ -448,6 +619,10 @@ export default function Admin() {
           ))}
         </div>
       )}
+
+      {/* ผลตรวจ + เหตุผลผู้ตอบ */}
+      <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
+      <ExamResults sets={sets} />
 
       {/* จัดการผู้ใช้ */}
       <h2 className="mb-2 mt-6 text-base font-bold text-slate-700">

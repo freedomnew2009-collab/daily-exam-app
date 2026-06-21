@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Spinner, Button, Empty } from '../components/ui'
+import { Spinner, Button, Empty, formatDuration } from '../components/ui'
 
 export default function Quiz() {
   const { setId } = useParams()
@@ -16,6 +16,8 @@ export default function Quiz() {
   const [responses, setResponses] = useState({}) // qid -> { selected, reason }
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState('')
+  const [elapsed, setElapsed] = useState(0) // วินาทีที่ใช้ไปทั้งชุด
+  const startRef = useRef(null)
 
   useEffect(() => {
     ;(async () => {
@@ -24,7 +26,7 @@ export default function Quiz() {
         supabase.from('exam_sets').select('id, day_number, title').eq('id', setId).single(),
         supabase
           .from('questions')
-          .select('id, order_index, question_text, choices')
+          .select('id, order_index, question_text, image_url, choices')
           .eq('exam_set_id', setId)
           .order('order_index', { ascending: true }),
       ])
@@ -33,6 +35,16 @@ export default function Quiz() {
       setLoading(false)
     })()
   }, [setId])
+
+  // เริ่มจับเวลาทั้งชุดเมื่อโหลดคำถามเสร็จ
+  useEffect(() => {
+    if (loading || !questions.length) return
+    startRef.current = Date.now()
+    const t = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(t)
+  }, [loading, questions.length])
 
   if (loading) return <Spinner />
   if (!questions.length)
@@ -55,10 +67,14 @@ export default function Quiz() {
         selected_choice: responses[qq.id]?.selected || null,
         reason: responses[qq.id]?.reason?.trim() || null,
       }))
+      const duration = startRef.current
+        ? Math.floor((Date.now() - startRef.current) / 1000)
+        : 0
       const { data, error } = await supabase.rpc('submit_attempt', {
         p_user_id: user.id,
         p_exam_set_id: setId,
         p_answers: payload,
+        p_duration: duration,
       })
       if (error) throw error
       // data = { attempt_id, score, total }
@@ -73,15 +89,18 @@ export default function Quiz() {
     <div className="flex min-h-[calc(100vh-60px)] flex-col px-4 pt-3">
       {/* แถบความคืบหน้า */}
       <div className="mb-4">
-        <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-500">
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
           <button
             onClick={() => navigate('/')}
-            className="rounded-lg bg-white/70 px-2 py-1 text-violet-600 shadow-sm"
+            className="flex-shrink-0 rounded-lg bg-white/70 px-2 py-1 text-violet-600 shadow-sm"
           >
             ← ออก
           </button>
-          <span>
-            ข้อ {idx + 1} / {questions.length} · ตอบแล้ว {answeredCount} ✅
+          <span className="inline-flex items-center gap-1 rounded-lg bg-violet-100 px-2 py-1 font-bold text-violet-700 tabular-nums">
+            ⏱ {formatDuration(elapsed)}
+          </span>
+          <span className="flex-shrink-0">
+            ข้อ {idx + 1}/{questions.length} · ตอบ {answeredCount} ✅
           </span>
         </div>
         <div className="h-2.5 w-full overflow-hidden rounded-full bg-violet-100">
@@ -95,9 +114,18 @@ export default function Quiz() {
       {/* คำถาม */}
       <div key={q.id} className="animate-pop flex-1">
         <p className="text-xs font-semibold text-violet-500">วันที่ {examSet?.day_number}</p>
-        <h2 className="mb-4 mt-1 text-lg font-bold leading-relaxed text-slate-800">
+        <h2 className="mb-3 mt-1 text-lg font-bold leading-relaxed text-slate-800">
           {q.question_text}
         </h2>
+
+        {q.image_url && (
+          <img
+            src={q.image_url}
+            alt="รูปประกอบคำถาม"
+            className="mb-4 max-h-72 w-full rounded-2xl border border-violet-100 object-contain shadow-sm"
+            loading="lazy"
+          />
+        )}
 
         <div className="space-y-2.5">
           {(q.choices || []).map((c) => {

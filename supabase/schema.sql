@@ -32,9 +32,12 @@ create table if not exists questions (
   exam_set_id uuid not null references exam_sets(id) on delete cascade,
   order_index int not null default 0,
   question_text text not null,
+  image_url text, -- รูปประกอบคำถาม (ไม่บังคับ)
   choices jsonb not null default '[]'::jsonb, -- [{key,text}]
   created_at timestamptz not null default now()
 );
+-- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
+alter table questions add column if not exists image_url text;
 
 -- เฉลย (แยกตาราง — อ่านได้เฉพาะแอดมิน / ผ่าน RPC หลังทำเสร็จ)
 create table if not exists question_keys (
@@ -50,9 +53,12 @@ create table if not exists attempts (
   exam_set_id uuid not null references exam_sets(id) on delete cascade,
   score int not null default 0,
   total int not null default 0,
+  duration_seconds int not null default 0, -- เวลาที่ใช้ทำทั้งชุด (วินาที)
   completed boolean not null default false,
   created_at timestamptz not null default now()
 );
+-- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
+alter table attempts add column if not exists duration_seconds int not null default 0;
 
 -- คำตอบราย ข้อ (เก็บเหตุผลที่ผู้ใช้เลือกตอบ)
 create table if not exists answers (
@@ -182,8 +188,9 @@ begin
   returning id into v_set_id;
 
   for rec in select * from jsonb_array_elements(p_questions) loop
-    insert into questions(exam_set_id, order_index, question_text, choices)
-    values (v_set_id, v_idx, rec->>'question_text', rec->'choices')
+    insert into questions(exam_set_id, order_index, question_text, choices, image_url)
+    values (v_set_id, v_idx, rec->>'question_text', rec->'choices',
+            nullif(rec->>'image_url', ''))
     returning id into v_q_id;
 
     insert into question_keys(question_id, correct_choice, explanation)
@@ -212,8 +219,9 @@ begin
   select coalesce(max(order_index), -1) + 1 into v_idx
     from questions where exam_set_id = p_exam_set_id;
 
-  insert into questions(exam_set_id, order_index, question_text, choices)
-  values (p_exam_set_id, v_idx, p_question->>'question_text', p_question->'choices')
+  insert into questions(exam_set_id, order_index, question_text, choices, image_url)
+  values (p_exam_set_id, v_idx, p_question->>'question_text', p_question->'choices',
+          nullif(p_question->>'image_url', ''))
   returning id into v_q_id;
 
   insert into question_keys(question_id, correct_choice, explanation)
@@ -226,8 +234,11 @@ end;
 $$;
 
 -- ผู้ใช้ส่งคำตอบ -> ระบบตรวจให้คะแนน (เฉลยไม่หลุดออกไปฝั่ง client)
-create or replace function submit_attempt(
-  p_user_id uuid, p_exam_set_id uuid, p_answers jsonb
+-- p_duration = เวลาที่ใช้ทำทั้งชุด (วินาที)
+drop function if exists submit_attempt(uuid, uuid, jsonb);
+drop function if exists submit_attempt(uuid, uuid, jsonb, int);
+create function submit_attempt(
+  p_user_id uuid, p_exam_set_id uuid, p_answers jsonb, p_duration int default 0
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -244,8 +255,8 @@ begin
 
   select count(*) into v_total from questions where exam_set_id = p_exam_set_id;
 
-  insert into attempts(user_id, exam_set_id, score, total, completed)
-  values (p_user_id, p_exam_set_id, 0, v_total, true)
+  insert into attempts(user_id, exam_set_id, score, total, completed, duration_seconds)
+  values (p_user_id, p_exam_set_id, 0, v_total, true, greatest(0, coalesce(p_duration, 0)))
   returning id into v_attempt_id;
 
   for rec in select * from jsonb_array_elements(p_answers) loop
@@ -284,6 +295,7 @@ begin
   select jsonb_agg(jsonb_build_object(
       'question_id', q.id,
       'question_text', q.question_text,
+      'image_url', q.image_url,
       'choices', q.choices,
       'correct_choice', k.correct_choice,
       'explanation', k.explanation,
@@ -299,8 +311,54 @@ begin
 
   return jsonb_build_object(
     'score', v_attempt.score, 'total', v_attempt.total,
+    'duration_seconds', v_attempt.duration_seconds,
     'items', coalesce(v_items, '[]'::jsonb)
   );
+end;
+$$;
+
+-- ผลตรวจสำหรับแอดมิน — เห็นคำตอบ + เหตุผลของผู้ใช้ทุกคนในชุดนั้น
+create or replace function get_exam_results(p_exam_set_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_items jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'unauthorized: admin only';
+  end if;
+
+  select jsonb_agg(att order by att_created desc) into v_items
+  from (
+    select a.created_at as att_created,
+      jsonb_build_object(
+        'attempt_id', a.id,
+        'username', p.username,
+        'score', a.score,
+        'total', a.total,
+        'duration_seconds', a.duration_seconds,
+        'created_at', a.created_at,
+        'answers', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'order_index', q.order_index,
+            'question_text', q.question_text,
+            'selected_choice', ans.selected_choice,
+            'correct_choice', k.correct_choice,
+            'is_correct', ans.is_correct,
+            'reason', ans.reason
+          ) order by q.order_index)
+          from answers ans
+          join questions q on q.id = ans.question_id
+          left join question_keys k on k.question_id = q.id
+          where ans.attempt_id = a.id
+        ), '[]'::jsonb)
+      ) as att
+    from attempts a
+    join profiles p on p.id = a.user_id
+    where a.exam_set_id = p_exam_set_id and a.completed = true
+  ) sub;
+
+  return jsonb_build_object('items', coalesce(v_items, '[]'::jsonb));
 end;
 $$;
 
@@ -341,8 +399,26 @@ $$;
 grant execute on function create_exam_set(int, text, boolean, jsonb) to authenticated;
 grant execute on function add_question(uuid, jsonb) to authenticated;
 grant execute on function get_private_threads(uuid) to anon, authenticated;
-grant execute on function submit_attempt(uuid, uuid, jsonb) to anon, authenticated;
+grant execute on function submit_attempt(uuid, uuid, jsonb, int) to anon, authenticated;
 grant execute on function get_review(uuid, uuid) to anon, authenticated;
+grant execute on function get_exam_results(uuid) to authenticated;
+
+-- ---------- ที่เก็บรูปคำถาม (Supabase Storage) ----------
+insert into storage.buckets (id, name, public)
+values ('question-images', 'question-images', true)
+on conflict (id) do nothing;
+
+drop policy if exists qimg_public_read on storage.objects;
+create policy qimg_public_read on storage.objects for select
+  using (bucket_id = 'question-images');
+
+drop policy if exists qimg_admin_insert on storage.objects;
+create policy qimg_admin_insert on storage.objects for insert
+  with check (bucket_id = 'question-images' and auth.uid() is not null);
+
+drop policy if exists qimg_admin_delete on storage.objects;
+create policy qimg_admin_delete on storage.objects for delete
+  using (bucket_id = 'question-images' and auth.uid() is not null);
 
 -- ---------- Realtime (แจ้งเตือนข้อสอบใหม่ + ถาม-ตอบสด) ----------
 alter publication supabase_realtime add table exam_sets;
