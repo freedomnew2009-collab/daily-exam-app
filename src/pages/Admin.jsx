@@ -1057,18 +1057,61 @@ export default function Admin() {
     Array.from({ length: 5 }, blankQuestion)
   )
   const [saving, setSaving] = useState(false)
+  const [formLoading, setFormLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const formRef = useRef(null)
 
   const isNewSet = targetSetId === ''
 
-  // เลือกเพิ่มเข้าชุดเดิม -> เตรียมฟอร์มแบบ "ทีละข้อ" แล้วเลื่อนขึ้นไปที่ฟอร์ม
-  const pickTarget = (setId) => {
+  // รวมตัวเลือกเดิมให้เป็นช่อง A-E ครบเพื่อแก้ไขได้
+  const normalizeChoices = (choices) => {
+    const map = {}
+    for (const c of choices || []) map[c.key] = c.text
+    return LETTERS.map((k) => ({ key: k, text: map[k] || '' }))
+  }
+
+  // เลือกชุดเดิม -> โหลดคำถาม+เฉลยทั้งหมดกลับมาแก้ไข; เลือก "สร้างใหม่" -> ฟอร์มเปล่า
+  const pickTarget = async (setId) => {
     setTargetSetId(setId)
     setMsg('')
-    if (setId !== '') setQuestions([blankQuestion()])
-    else setQuestions(Array.from({ length: 5 }, blankQuestion))
+    if (setId === '') {
+      setTitle('')
+      setQuestions(Array.from({ length: 5 }, blankQuestion))
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    const tgt = sets.find((s) => s.id === setId)
+    if (tgt) {
+      setTitle(tgt.title || '')
+      setDayNumber(tgt.day_number)
+    }
+    setFormLoading(true)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const { data: qs } = await supabase
+      .from('questions')
+      .select('id, order_index, question_text, image_url, category, choices')
+      .eq('exam_set_id', setId)
+      .order('order_index', { ascending: true })
+    const ids = (qs || []).map((q) => q.id)
+    const keys = {}
+    if (ids.length) {
+      const { data: ks } = await supabase
+        .from('question_keys')
+        .select('question_id, correct_choice, explanation')
+        .in('question_id', ids)
+      for (const k of ks || []) keys[k.question_id] = k
+    }
+    const loaded = (qs || []).map((q) => ({
+      id: q.id,
+      question_text: q.question_text || '',
+      image_url: q.image_url || '',
+      category: q.category || '',
+      choices: normalizeChoices(q.choices),
+      correct_choice: keys[q.id]?.correct_choice || 'A',
+      explanation: keys[q.id]?.explanation || '',
+    }))
+    setQuestions(loaded.length ? loaded : [blankQuestion()])
+    setFormLoading(false)
   }
 
   const load = useCallback(async () => {
@@ -1118,7 +1161,18 @@ export default function Admin() {
   if (loading) return <Spinner />
 
   const updateQ = (i, val) => setQuestions((qs) => qs.map((q, qi) => (qi === i ? val : q)))
-  const removeQ = (i) => setQuestions((qs) => qs.filter((_, qi) => qi !== i))
+  const removeQ = async (i) => {
+    const q = questions[i]
+    if (q.id) {
+      if (!confirm('ลบข้อนี้ออกจากชุดถาวร?')) return
+      const { error } = await supabase.rpc('delete_question', { p_question_id: q.id })
+      if (error) {
+        setMsg('❌ ลบไม่สำเร็จ: ' + error.message)
+        return
+      }
+    }
+    setQuestions((qs) => qs.filter((_, qi) => qi !== i))
+  }
   const addQ = () => setQuestions((qs) => [...qs, blankQuestion()])
 
   // ข้อที่ยังไม่ได้กรอกอะไรเลย -> ข้ามไป (ไม่ต้องครบ 5 ข้อ)
@@ -1149,13 +1203,17 @@ export default function Admin() {
     }
     setSaving(true)
     try {
-      const payload = filledQuestions.map((q) => ({
-        question_text: q.question_text.trim(),
-        image_url: q.image_url || '',
-        category: (q.category || '').trim(),
-        choices: q.choices.filter((c) => c.text.trim()),
-        correct_choice: q.correct_choice,
-        explanation: q.explanation.trim(),
+      // เก็บ id ไว้เพื่อแยกว่า "แก้ของเดิม" หรือ "เพิ่มใหม่"
+      const items = filledQuestions.map((q) => ({
+        id: q.id || null,
+        data: {
+          question_text: q.question_text.trim(),
+          image_url: q.image_url || '',
+          category: (q.category || '').trim(),
+          choices: q.choices.filter((c) => c.text.trim()),
+          correct_choice: q.correct_choice,
+          explanation: q.explanation.trim(),
+        },
       }))
 
       if (isNewSet) {
@@ -1163,26 +1221,39 @@ export default function Admin() {
           p_day: Number(dayNumber),
           p_title: title.trim() || `ชุดข้อสอบวันที่ ${dayNumber}`,
           p_published: publish,
-          p_questions: payload,
+          p_questions: items.map((it) => it.data),
         })
         if (error) throw error
         setMsg('✅ บันทึกชุดข้อสอบใหม่เรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
         setTitle('')
         setQuestions(Array.from({ length: 5 }, blankQuestion))
       } else {
-        // เพิ่มทีละข้อเข้าไปในชุดเดิม (ทีละข้อใน payload)
-        for (const q of payload) {
-          const { error } = await supabase.rpc('add_question', {
-            p_exam_set_id: targetSetId,
-            p_question: q,
-          })
-          if (error) throw error
+        // อัปเดตชื่อ/วันที่ของชุด แล้วแก้ของเดิม/เพิ่มข้อใหม่
+        await supabase
+          .from('exam_sets')
+          .update({ title: title.trim() || null, day_number: Number(dayNumber) })
+          .eq('id', targetSetId)
+
+        let updated = 0
+        let added = 0
+        for (const it of items) {
+          if (it.id) {
+            const { error } = await supabase.rpc('update_question', {
+              p_question_id: it.id,
+              p_question: it.data,
+            })
+            if (error) throw error
+            updated += 1
+          } else {
+            const { error } = await supabase.rpc('add_question', {
+              p_exam_set_id: targetSetId,
+              p_question: it.data,
+            })
+            if (error) throw error
+            added += 1
+          }
         }
-        const tgt = sets.find((s) => s.id === targetSetId)
-        setMsg(
-          `✅ เพิ่ม ${payload.length} ข้อเข้า "วันที่ ${tgt?.day_number} · ${tgt?.title || ''}" แล้ว`
-        )
-        setQuestions([blankQuestion()]) // พร้อมพิมพ์ข้อถัดไปทันที
+        setMsg(`✅ บันทึกแล้ว — แก้ไข ${updated} ข้อ, เพิ่มใหม่ ${added} ข้อ`)
       }
       await load()
     } catch (e) {
@@ -1296,14 +1367,14 @@ export default function Admin() {
         <ArticlesAdmin />
       </div>
 
-      {/* เพิ่มข้อสอบ */}
+      {/* เพิ่ม/แก้ไขข้อสอบ */}
       <h2 id="sec-add" ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
-        {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '➕ เพิ่มคำถามเข้าชุดเดิม'}
+        {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '✏️ แก้ไขชุดข้อสอบ'}
       </h2>
       <Card className="mb-3 space-y-3">
-        {/* เลือกปลายทาง: ชุดใหม่ หรือชุดเดิม */}
+        {/* เลือก: สร้างใหม่ หรือแก้ไขชุดเดิม */}
         <div>
-          <label className="text-xs font-medium text-slate-500">เพิ่มคำถามไปไว้ที่</label>
+          <label className="text-xs font-medium text-slate-500">สร้างชุดใหม่ หรือเลือกชุดเดิมมาแก้ไข</label>
           <select
             value={targetSetId}
             onChange={(e) => pickTarget(e.target.value)}
@@ -1312,94 +1383,93 @@ export default function Admin() {
             <option value="">➕ สร้างชุดใหม่</option>
             {sets.map((s) => (
               <option key={s.id} value={s.id}>
-                วันที่ {s.day_number} · {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
+                ✏️ แก้ไข: วันที่ {s.day_number} · {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
               </option>
             ))}
           </select>
         </div>
 
-        {/* ฟิลด์ของชุดใหม่ (โชว์เฉพาะตอนสร้างชุดใหม่) */}
-        {isNewSet && (
-          <>
-            <div className="flex gap-2">
-              <div className="w-24">
-                <label className="text-xs font-medium text-slate-500">วันที่</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={dayNumber}
-                  onChange={(e) => setDayNumber(e.target.value)}
-                  className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-xs font-medium text-slate-500">ชื่อชุด</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={`ชุดข้อสอบวันที่ ${dayNumber}`}
-                  className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
-                />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-              <input
-                type="checkbox"
-                checked={publish}
-                onChange={(e) => setPublish(e.target.checked)}
-                className="h-4 w-4 accent-violet-500"
-              />
-              เผยแพร่ทันที (ผู้ใช้เห็น + แจ้งเตือนข้อสอบใหม่)
-            </label>
-          </>
-        )}
-        {!isNewSet && (
+        {/* วันที่ + ชื่อชุด (ทั้งสร้างใหม่และแก้ไข) */}
+        <div className="flex gap-2">
+          <div className="w-24">
+            <label className="text-xs font-medium text-slate-500">วันที่</label>
+            <input
+              type="number"
+              min={1}
+              value={dayNumber}
+              onChange={(e) => setDayNumber(e.target.value)}
+              className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-medium text-slate-500">ชื่อชุด</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={`ชุดข้อสอบวันที่ ${dayNumber}`}
+              className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
+            />
+          </div>
+        </div>
+        {isNewSet ? (
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={publish}
+              onChange={(e) => setPublish(e.target.checked)}
+              className="h-4 w-4 accent-violet-500"
+            />
+            เผยแพร่ทันที (ผู้ใช้เห็น + แจ้งเตือนข้อสอบใหม่)
+          </label>
+        ) : (
           <p className="rounded-xl bg-violet-50 p-2.5 text-xs text-violet-700">
-            กำลังเพิ่มคำถามต่อท้ายชุดที่เลือก — เพิ่มทีละข้อ หรือหลายข้อก็ได้ บันทึกแล้วฟอร์มจะพร้อมให้พิมพ์ข้อถัดไปทันที
+            กำลังแก้ไขชุดเดิม — แก้ข้อที่มีอยู่ได้เลย หรือกด "+ เพิ่มคำถาม" เพื่อเพิ่มข้อใหม่ แล้วกดบันทึก
           </p>
         )}
       </Card>
 
-      <div className="space-y-3">
-        {questions.map((q, i) => (
-          <QuestionEditor
-            key={i}
-            q={q}
-            index={i}
-            categories={categoryList}
-            onChange={(val) => updateQ(i, val)}
-            onRemove={() => removeQ(i)}
-          />
-        ))}
-      </div>
+      {formLoading ? (
+        <Spinner label="กำลังโหลดข้อสอบมาแก้ไข…" />
+      ) : (
+        <>
+          <div className="space-y-3">
+            {questions.map((q, i) => (
+              <QuestionEditor
+                key={q.id || `new-${i}`}
+                q={q}
+                index={i}
+                categories={categoryList}
+                onChange={(val) => updateQ(i, val)}
+                onRemove={() => removeQ(i)}
+              />
+            ))}
+          </div>
 
-      <button
-        onClick={addQ}
-        className="mt-3 w-full rounded-2xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50"
-      >
-        + เพิ่มคำถาม
-      </button>
+          <button
+            onClick={addQ}
+            className="mt-3 w-full rounded-2xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50"
+          >
+            + เพิ่มคำถาม
+          </button>
 
-      {msg && (
-        <p
-          className={`mt-3 text-sm font-semibold ${
-            msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'
-          }`}
-        >
-          {msg}
-        </p>
+          {msg && (
+            <p
+              className={`mt-3 text-sm font-semibold ${
+                msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'
+              }`}
+            >
+              {msg}
+            </p>
+          )}
+
+          <Button onClick={save} disabled={saving} className="mt-3 w-full">
+            {saving ? 'กำลังบันทึก…' : isNewSet ? '💾 บันทึกชุดข้อสอบใหม่' : '💾 บันทึกการแก้ไข'}
+          </Button>
+          <p className="mt-2 text-center text-xs text-slate-400">
+            กรอกกี่ข้อก็ได้ — ข้อที่เว้นว่างไว้จะถูกข้ามให้อัตโนมัติ
+          </p>
+        </>
       )}
-
-      <Button onClick={save} disabled={saving} className="mt-3 w-full">
-        {saving
-          ? 'กำลังบันทึก…'
-          : isNewSet
-            ? '💾 บันทึกชุดข้อสอบใหม่'
-            : `💾 เพิ่ม ${questions.filter((q) => !isBlankQuestion(q)).length} ข้อเข้าชุดนี้`}
-      </Button>
-      <p className="mt-2 text-center text-xs text-slate-400">
-        กรอกกี่ข้อก็ได้ — ข้อที่เว้นว่างไว้จะถูกข้ามให้อัตโนมัติ
-      </p>
 
       {/* ชุดที่มีอยู่ */}
       <h2 id="sec-sets" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">📚 ชุดข้อสอบที่มีอยู่</h2>
@@ -1426,9 +1496,9 @@ export default function Admin() {
                 <button
                   onClick={() => pickTarget(s.id)}
                   className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
-                  title="เพิ่มคำถามเข้าชุดนี้"
+                  title="แก้ไข/เพิ่มคำถามในชุดนี้"
                 >
-                  + เพิ่มข้อ
+                  ✏️ แก้ไข
                 </button>
                 <button
                   onClick={() => togglePublish(s)}
