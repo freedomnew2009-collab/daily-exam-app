@@ -679,7 +679,7 @@ function ExamResults({ sets }) {
         <option value="">— เลือกชุดเพื่อดูผลตรวจ —</option>
         {sets.map((s) => (
           <option key={s.id} value={s.id}>
-            วันที่ {s.day_number} · {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
+            {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
           </option>
         ))}
       </select>
@@ -1010,15 +1010,15 @@ function ArticlesAdmin() {
 
 // รายการเมนูในแถบด้านข้างของหน้าแอดมิน (เลื่อนไปยังแต่ละส่วน)
 const ADMIN_SECTIONS = [
-  { id: 'sec-add', label: '➕ เพิ่มข้อสอบ' },
+  { id: 'sec-add', label: '➕ เพิ่ม/แก้ไขข้อสอบ' },
+  { id: 'sec-sets', label: '📚 ชุดข้อสอบที่มีอยู่' },
+  { id: 'sec-results', label: '📊 ผลตรวจ' },
   { id: 'sec-categories', label: '🏷️ หมวดข้อสอบ' },
   { id: 'sec-time', label: '⏱ เวลาทำข้อสอบ' },
   { id: 'sec-encourage', label: '💛 ข้อความให้กำลังใจ' },
   { id: 'sec-score', label: '🎯 ข้อความตามคะแนน' },
   { id: 'sec-qa', label: '💬 ข้อความช่องถาม-ตอบ' },
   { id: 'sec-articles', label: '📰 บทความความรู้' },
-  { id: 'sec-sets', label: '📚 ชุดข้อสอบที่มีอยู่' },
-  { id: 'sec-results', label: '📊 ผลตรวจ' },
   { id: 'sec-users', label: '👥 ผู้ใช้' },
 ]
 
@@ -1218,8 +1218,8 @@ export default function Admin() {
 
       if (isNewSet) {
         const { error } = await supabase.rpc('create_exam_set', {
-          p_day: Number(dayNumber),
-          p_title: title.trim() || `ชุดข้อสอบวันที่ ${dayNumber}`,
+          p_day: Number(dayNumber), // ลำดับภายในสำหรับเรียงชุด (ไม่แสดงให้กรอก)
+          p_title: title.trim() || `ชุดข้อสอบที่ ${dayNumber}`,
           p_published: publish,
           p_questions: items.map((it) => it.data),
         })
@@ -1228,10 +1228,10 @@ export default function Admin() {
         setTitle('')
         setQuestions(Array.from({ length: 5 }, blankQuestion))
       } else {
-        // อัปเดตชื่อ/วันที่ของชุด แล้วแก้ของเดิม/เพิ่มข้อใหม่
+        // อัปเดตชื่อชุด แล้วแก้ของเดิม/เพิ่มข้อใหม่
         await supabase
           .from('exam_sets')
-          .update({ title: title.trim() || null, day_number: Number(dayNumber) })
+          .update({ title: title.trim() || null })
           .eq('id', targetSetId)
 
         let updated = 0
@@ -1269,7 +1269,7 @@ export default function Admin() {
   }
 
   const removeSet = async (s) => {
-    if (!confirm(`ลบชุด "วันที่ ${s.day_number}" และคำถามทั้งหมด?`)) return
+    if (!confirm(`ลบชุด "${s.title || 'ชุดข้อสอบ'}" และคำถามทั้งหมด?`)) return
     await supabase.from('exam_sets').delete().eq('id', s.id)
     load()
   }
@@ -1320,53 +1320,6 @@ export default function Admin() {
         </button>
       </header>
 
-      {/* คำถามส่วนตัว */}
-      <Link to="/qa" className="mb-4 block">
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="font-bold text-slate-800">📨 คำถามส่วนตัวถึงแอดมิน</p>
-            <p className="text-xs text-slate-400">แตะเพื่อไปตอบในแท็บถาม-ตอบ → ส่วนตัว</p>
-          </div>
-          <Badge color={privateCount ? 'red' : 'slate'}>{privateCount}</Badge>
-        </Card>
-      </Link>
-
-      {/* หมวดข้อสอบ */}
-      <h2 id="sec-categories" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">🏷️ หมวดข้อสอบ</h2>
-      <div className="mb-4">
-        <CategorySetting onSaved={setCategoryList} />
-      </div>
-
-      {/* เวลาทำข้อสอบ */}
-      <h2 id="sec-time" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">⏱ เวลาทำข้อสอบ (นับถอยหลัง)</h2>
-      <div className="mb-4">
-        <QuizTimeSetting />
-      </div>
-
-      {/* ข้อความให้กำลังใจหลังทำข้อสอบ */}
-      <h2 id="sec-encourage" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
-      <div className="mb-4">
-        <EncourageSetting />
-      </div>
-
-      {/* ข้อความตามคะแนนที่ได้ */}
-      <h2 id="sec-score" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">🎯 ข้อความตามคะแนนที่ได้</h2>
-      <div className="mb-4">
-        <ScoreMessageSetting />
-      </div>
-
-      {/* ข้อความในช่องถาม-ตอบ */}
-      <h2 id="sec-qa" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💬 ข้อความในช่องถาม-ตอบ</h2>
-      <div className="mb-4">
-        <QaPlaceholderSetting />
-      </div>
-
-      {/* บทความความรู้ */}
-      <h2 id="sec-articles" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">📰 บทความความรู้</h2>
-      <div className="mb-4">
-        <ArticlesAdmin />
-      </div>
-
       {/* เพิ่ม/แก้ไขข้อสอบ */}
       <h2 id="sec-add" ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
         {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '✏️ แก้ไขชุดข้อสอบ'}
@@ -1383,33 +1336,21 @@ export default function Admin() {
             <option value="">➕ สร้างชุดใหม่</option>
             {sets.map((s) => (
               <option key={s.id} value={s.id}>
-                ✏️ แก้ไข: วันที่ {s.day_number} · {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
+                ✏️ แก้ไข: {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
               </option>
             ))}
           </select>
         </div>
 
-        {/* วันที่ + ชื่อชุด (ทั้งสร้างใหม่และแก้ไข) */}
-        <div className="flex gap-2">
-          <div className="w-24">
-            <label className="text-xs font-medium text-slate-500">วันที่</label>
-            <input
-              type="number"
-              min={1}
-              value={dayNumber}
-              onChange={(e) => setDayNumber(e.target.value)}
-              className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs font-medium text-slate-500">ชื่อชุด</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={`ชุดข้อสอบวันที่ ${dayNumber}`}
-              className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
-            />
-          </div>
+        {/* ชื่อชุด */}
+        <div>
+          <label className="text-xs font-medium text-slate-500">ชื่อชุดข้อสอบ</label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="เช่น ข้อสอบบทที่ 1, แนวข้อสอบกลางภาค…"
+            className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
+          />
         </div>
         {isNewSet ? (
           <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
@@ -1480,9 +1421,7 @@ export default function Admin() {
           {sets.map((s) => (
             <Card key={s.id} className="flex items-center justify-between">
               <div className="min-w-0">
-                <p className="truncate font-bold text-slate-800">
-                  วันที่ {s.day_number} · {s.title}
-                </p>
+                <p className="truncate font-bold text-slate-800">{s.title || 'ชุดข้อสอบ'}</p>
                 <p className="text-xs text-slate-400">
                   {s.question_count} ข้อ ·{' '}
                   {s.published ? (
@@ -1521,6 +1460,53 @@ export default function Admin() {
       {/* ผลตรวจ + เหตุผลผู้ตอบ */}
       <h2 id="sec-results" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
       <ExamResults sets={sets} />
+
+      {/* หมวดข้อสอบ */}
+      <h2 id="sec-categories" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">🏷️ หมวดข้อสอบ</h2>
+      <div className="mb-4">
+        <CategorySetting onSaved={setCategoryList} />
+      </div>
+
+      {/* เวลาทำข้อสอบ */}
+      <h2 id="sec-time" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">⏱ เวลาทำข้อสอบ (นับถอยหลัง)</h2>
+      <div className="mb-4">
+        <QuizTimeSetting />
+      </div>
+
+      {/* ข้อความให้กำลังใจหลังทำข้อสอบ */}
+      <h2 id="sec-encourage" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
+      <div className="mb-4">
+        <EncourageSetting />
+      </div>
+
+      {/* ข้อความตามคะแนนที่ได้ */}
+      <h2 id="sec-score" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">🎯 ข้อความตามคะแนนที่ได้</h2>
+      <div className="mb-4">
+        <ScoreMessageSetting />
+      </div>
+
+      {/* ข้อความในช่องถาม-ตอบ */}
+      <h2 id="sec-qa" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💬 ข้อความในช่องถาม-ตอบ</h2>
+      <div className="mb-4">
+        <QaPlaceholderSetting />
+      </div>
+
+      {/* คำถามส่วนตัว */}
+      <Link to="/qa" className="mb-4 block">
+        <Card className="flex items-center justify-between">
+          <div>
+            <p className="font-bold text-slate-800">📨 คำถามส่วนตัวถึงแอดมิน</p>
+            <p className="text-xs text-slate-400">แตะเพื่อไปตอบในแท็บถาม-ตอบ → ส่วนตัว</p>
+          </div>
+          <Badge color={privateCount ? 'red' : 'slate'}>{privateCount}</Badge>
+        </Card>
+      </Link>
+
+      {/* บทความความรู้ */}
+      <h2 id="sec-articles" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">📰 บทความความรู้</h2>
+      <div className="mb-4">
+        <ArticlesAdmin />
+      </div>
 
       {/* จัดการผู้ใช้ */}
       <h2 id="sec-users" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">
