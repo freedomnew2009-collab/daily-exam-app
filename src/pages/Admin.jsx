@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
-import { Button, Card, Badge, Spinner, AutoTextarea, formatDuration } from '../components/ui'
+import { Button, Card, Badge, Spinner, AutoTextarea, BigTextField, formatDuration } from '../components/ui'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
@@ -204,12 +204,11 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
       <p className="text-xs text-slate-500">
         ✅ คำตอบที่ถูก: <b className="text-emerald-600">{q.correct_choice}</b> (แตะวงกลมตัวอักษรเพื่อเปลี่ยน)
       </p>
-      <AutoTextarea
+      <BigTextField
+        label="คำอธิบาย / เฉลย"
         value={q.explanation}
-        onChange={(e) => setField({ explanation: e.target.value })}
-        minRows={3}
-        placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ)… พิมพ์ยาวได้ ช่องจะขยายตามอัตโนมัติ"
-        className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-[15px] leading-relaxed text-slate-800 outline-none transition focus:border-violet-400"
+        onChange={(v) => setField({ explanation: v })}
+        placeholder="คำอธิบาย/เฉลย (แสดงหลังผู้ใช้ทำเสร็จ) — แตะเพื่อเปิดช่องใหญ่"
       />
     </Card>
   )
@@ -1010,21 +1009,22 @@ function ArticlesAdmin() {
 
 // รายการเมนูในแถบด้านข้างของหน้าแอดมิน (เลื่อนไปยังแต่ละส่วน)
 const ADMIN_SECTIONS = [
-  { id: 'sec-add', label: '➕ เพิ่ม/แก้ไขข้อสอบ' },
-  { id: 'sec-sets', label: '📚 ชุดข้อสอบที่มีอยู่' },
-  { id: 'sec-results', label: '📊 ผลตรวจ' },
-  { id: 'sec-categories', label: '🏷️ หมวดข้อสอบ' },
-  { id: 'sec-time', label: '⏱ เวลาทำข้อสอบ' },
-  { id: 'sec-encourage', label: '💛 ข้อความให้กำลังใจ' },
-  { id: 'sec-score', label: '🎯 ข้อความตามคะแนน' },
-  { id: 'sec-qa', label: '💬 ข้อความช่องถาม-ตอบ' },
-  { id: 'sec-articles', label: '📰 บทความความรู้' },
-  { id: 'sec-users', label: '👥 ผู้ใช้' },
+  { id: 'exams', label: '📝 ข้อสอบ' },
+  { id: 'results', label: '📊 ผลตรวจ' },
+  { id: 'categories', label: '🏷️ หมวดข้อสอบ' },
+  { id: 'time', label: '⏱ เวลาทำข้อสอบ' },
+  { id: 'encourage', label: '💛 ข้อความให้กำลังใจ' },
+  { id: 'score', label: '🎯 ข้อความตามคะแนน' },
+  { id: 'qa', label: '💬 ข้อความช่องถาม-ตอบ' },
+  { id: 'private', label: '📨 คำถามส่วนตัว' },
+  { id: 'articles', label: '📰 บทความความรู้' },
+  { id: 'users', label: '👥 ผู้ใช้' },
 ]
 
 export default function Admin() {
   const { isAdmin, adminEmail, adminSignOut } = useStore()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [section, setSection] = useState('exams') // หน้าที่กำลังเปิดอยู่
   const touchRef = useRef({ x: 0, y: 0 })
 
   const onTouchStart = (e) => {
@@ -1040,9 +1040,11 @@ export default function Admin() {
     else if (drawerOpen && dx < -60) setDrawerOpen(false)
   }
   const goSection = (secId) => {
+    setSection(secId)
     setDrawerOpen(false)
-    setTimeout(() => document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    window.scrollTo({ top: 0 })
   }
+  const sectionLabel = ADMIN_SECTIONS.find((m) => m.id === section)?.label || ''
   const [sets, setSets] = useState([])
   const [users, setUsers] = useState([])
   const [privateCount, setPrivateCount] = useState(0)
@@ -1290,12 +1292,17 @@ export default function Admin() {
                 <button
                   key={m.id}
                   onClick={() => goSection(m.id)}
-                  className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-violet-50"
+                  className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                    section === m.id ? 'bg-violet-600 text-white' : 'text-slate-700 hover:bg-violet-50'
+                  }`}
                 >
                   {m.label}
                 </button>
               ))}
             </div>
+            <p className="mt-4 truncate border-t border-violet-100 pt-3 text-xs text-slate-400">
+              {adminEmail}
+            </p>
           </div>
         </div>
       )}
@@ -1309,8 +1316,8 @@ export default function Admin() {
           ☰
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-extrabold">🛠️ แผงแอดมิน</h1>
-          <p className="truncate text-xs text-white/80">{adminEmail}</p>
+          <h1 className="truncate text-lg font-extrabold">{sectionLabel}</h1>
+          <p className="truncate text-xs text-white/80">แตะ ☰ เพื่อเปลี่ยนหน้า</p>
         </div>
         <button
           onClick={adminSignOut}
@@ -1320,8 +1327,10 @@ export default function Admin() {
         </button>
       </header>
 
+      {section === 'exams' && (
+        <>
       {/* เพิ่ม/แก้ไขข้อสอบ */}
-      <h2 id="sec-add" ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
+      <h2 ref={formRef} className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">
         {isNewSet ? '➕ เพิ่มชุดข้อสอบ' : '✏️ แก้ไขชุดข้อสอบ'}
       </h2>
       <Card className="mb-3 space-y-3">
@@ -1457,59 +1466,69 @@ export default function Admin() {
         </div>
       )}
 
+        </>
+      )}
+
+      {section === 'results' && (
+        <>
       {/* ผลตรวจ + เหตุผลผู้ตอบ */}
-      <h2 id="sec-results" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
+      <h2 className="mb-2 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
       <ExamResults sets={sets} />
+        </>
+      )}
 
-      {/* หมวดข้อสอบ */}
-      <h2 id="sec-categories" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">🏷️ หมวดข้อสอบ</h2>
-      <div className="mb-4">
-        <CategorySetting onSaved={setCategoryList} />
-      </div>
+      {section === 'categories' && (
+        <div className="mb-4">
+          <CategorySetting onSaved={setCategoryList} />
+        </div>
+      )}
 
-      {/* เวลาทำข้อสอบ */}
-      <h2 id="sec-time" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">⏱ เวลาทำข้อสอบ (นับถอยหลัง)</h2>
-      <div className="mb-4">
-        <QuizTimeSetting />
-      </div>
+      {section === 'time' && (
+        <div className="mb-4">
+          <QuizTimeSetting />
+        </div>
+      )}
 
-      {/* ข้อความให้กำลังใจหลังทำข้อสอบ */}
-      <h2 id="sec-encourage" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
-      <div className="mb-4">
-        <EncourageSetting />
-      </div>
+      {section === 'encourage' && (
+        <div className="mb-4">
+          <EncourageSetting />
+        </div>
+      )}
 
-      {/* ข้อความตามคะแนนที่ได้ */}
-      <h2 id="sec-score" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">🎯 ข้อความตามคะแนนที่ได้</h2>
-      <div className="mb-4">
-        <ScoreMessageSetting />
-      </div>
+      {section === 'score' && (
+        <div className="mb-4">
+          <ScoreMessageSetting />
+        </div>
+      )}
 
-      {/* ข้อความในช่องถาม-ตอบ */}
-      <h2 id="sec-qa" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">💬 ข้อความในช่องถาม-ตอบ</h2>
-      <div className="mb-4">
-        <QaPlaceholderSetting />
-      </div>
+      {section === 'qa' && (
+        <div className="mb-4">
+          <QaPlaceholderSetting />
+        </div>
+      )}
 
-      {/* คำถามส่วนตัว */}
-      <Link to="/qa" className="mb-4 block">
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="font-bold text-slate-800">📨 คำถามส่วนตัวถึงแอดมิน</p>
-            <p className="text-xs text-slate-400">แตะเพื่อไปตอบในแท็บถาม-ตอบ → ส่วนตัว</p>
-          </div>
-          <Badge color={privateCount ? 'red' : 'slate'}>{privateCount}</Badge>
-        </Card>
-      </Link>
+      {section === 'private' && (
+        <Link to="/qa" className="mb-4 block">
+          <Card className="flex items-center justify-between">
+            <div>
+              <p className="font-bold text-slate-800">📨 คำถามส่วนตัวถึงแอดมิน</p>
+              <p className="text-xs text-slate-400">แตะเพื่อไปตอบในแท็บถาม-ตอบ → ส่วนตัว</p>
+            </div>
+            <Badge color={privateCount ? 'red' : 'slate'}>{privateCount}</Badge>
+          </Card>
+        </Link>
+      )}
 
-      {/* บทความความรู้ */}
-      <h2 id="sec-articles" className="mb-2 scroll-mt-4 text-base font-bold text-slate-700">📰 บทความความรู้</h2>
-      <div className="mb-4">
-        <ArticlesAdmin />
-      </div>
+      {section === 'articles' && (
+        <div className="mb-4">
+          <ArticlesAdmin />
+        </div>
+      )}
 
+      {section === 'users' && (
+        <>
       {/* จัดการผู้ใช้ */}
-      <h2 id="sec-users" className="mb-2 mt-6 scroll-mt-4 text-base font-bold text-slate-700">
+      <h2 className="mb-2 text-base font-bold text-slate-700">
         👥 ผู้ใช้ ({users.length})
       </h2>
       {users.length === 0 ? (
@@ -1540,6 +1559,8 @@ export default function Admin() {
             </Card>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   )

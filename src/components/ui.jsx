@@ -1,6 +1,6 @@
 // คอมโพเนนต์ UI เล็ก ๆ ที่ใช้ซ้ำทั้งแอพ (mobile-first, โทนสว่างสดใส)
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // textarea ที่ยืดสูงตามข้อความที่พิมพ์อัตโนมัติ (พิมพ์เยอะก็เห็นครบ แก้ง่ายบนมือถือ)
 export function AutoTextarea({ value, minRows = 2, className = '', onInput, ...props }) {
@@ -25,6 +25,65 @@ export function AutoTextarea({ value, minRows = 2, className = '', onInput, ...p
       className={`overflow-hidden ${className}`}
       {...props}
     />
+  )
+}
+
+// ปุ่มที่กดแล้วเปิดช่องพิมพ์ใหญ่เต็มจอ (ตัวหนังสือใหญ่ อ่าน/แก้ง่ายบนมือถือ) กด "เสร็จ" แล้วย่อกลับ
+export function BigTextField({ label = 'คำอธิบาย', value = '', onChange, placeholder = '' }) {
+  const [open, setOpen] = useState(false)
+  const has = (value || '').trim().length > 0
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full rounded-xl border-2 border-violet-100 bg-white p-3 text-left"
+      >
+        <span className="flex items-center justify-between gap-2">
+          <span className="text-sm font-bold text-violet-600">📝 {label}</span>
+          <span className="flex-shrink-0 rounded-lg bg-violet-100 px-2 py-1 text-xs font-bold text-violet-600">
+            {has ? 'แตะเพื่อแก้ไข' : 'แตะเพื่อพิมพ์'} ▾
+          </span>
+        </span>
+        {has ? (
+          <span className="mt-1.5 block whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-600 line-clamp-3">
+            {value}
+          </span>
+        ) : (
+          <span className="mt-1.5 block text-sm text-slate-400">{placeholder || 'ยังไม่มีข้อความ'}</span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-slate-900/50 backdrop-blur-sm"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="mt-auto flex h-[88vh] flex-col rounded-t-3xl bg-white p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-base font-extrabold text-slate-800">📝 {label}</span>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 px-5 py-2 text-sm font-bold text-white shadow-md shadow-violet-300/50"
+              >
+                ✓ เสร็จ
+              </button>
+            </div>
+            <textarea
+              value={value}
+              onChange={(e) => onChange?.(e.target.value)}
+              autoFocus
+              placeholder={placeholder}
+              className="w-full flex-1 resize-none rounded-2xl border-2 border-violet-100 bg-white p-4 text-[17px] leading-relaxed text-slate-800 outline-none focus:border-violet-400"
+            />
+            <p className="mt-2 text-center text-xs text-slate-400">พิมพ์ได้ยาวเต็มที่ — กด “เสร็จ” เพื่อย่อกลับ</p>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
