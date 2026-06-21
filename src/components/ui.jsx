@@ -37,21 +37,15 @@ export function BigTextField({ label = 'คำอธิบาย', value = '', o
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-xl border-2 border-violet-100 bg-white p-3 text-left"
+        className="flex w-full items-center gap-2 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-left"
       >
-        <span className="flex items-center justify-between gap-2">
-          <span className="text-sm font-bold text-violet-600">📝 {label}</span>
-          <span className="flex-shrink-0 rounded-lg bg-violet-100 px-2 py-1 text-xs font-bold text-violet-600">
-            {has ? 'แตะเพื่อแก้ไข' : 'แตะเพื่อพิมพ์'} ▾
-          </span>
+        <span className="flex-shrink-0 text-sm font-bold text-violet-600">📝 {label}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-slate-500">
+          {has ? value : placeholder || 'แตะเพื่อพิมพ์'}
         </span>
-        {has ? (
-          <span className="mt-1.5 block whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-600 line-clamp-3">
-            {value}
-          </span>
-        ) : (
-          <span className="mt-1.5 block text-sm text-slate-400">{placeholder || 'ยังไม่มีข้อความ'}</span>
-        )}
+        <span className="flex-shrink-0 rounded-lg bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-600">
+          {has ? 'แก้ไข' : 'พิมพ์'} ▾
+        </span>
       </button>
 
       {open && (
