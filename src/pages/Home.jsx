@@ -6,8 +6,13 @@ import { getLastSeen, setLastSeen } from '../lib/notify'
 import { Spinner, Button, Card, Badge, Empty } from '../components/ui'
 
 export default function Home({ onSeen }) {
-  const { user, logoutUser, isAdmin } = useStore()
+  const { user, logoutUser, adminSignOut, isAdmin } = useStore()
   const navigate = useNavigate()
+
+  const logoutAll = async () => {
+    if (isAdmin) await adminSignOut()
+    logoutUser()
+  }
   const [loading, setLoading] = useState(true)
   const [sets, setSets] = useState([])
   const [attempts, setAttempts] = useState({}) // setId -> { count, best }
@@ -65,8 +70,11 @@ export default function Home({ onSeen }) {
             {user.username} {isAdmin && <Badge color="amber">แอดมิน</Badge>}
           </p>
         </div>
-        <button onClick={logoutUser} className="text-sm text-slate-400 underline">
-          ออก
+        <button
+          onClick={logoutAll}
+          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+        >
+          ↩ ออกจากระบบ
         </button>
       </header>
 

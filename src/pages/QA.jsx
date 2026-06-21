@@ -91,7 +91,12 @@ function Thread({ thread, isAdmin, currentUserId, onReply }) {
 }
 
 export default function QA() {
-  const { user, isAdmin } = useStore()
+  const { user, isAdmin, logoutUser, adminSignOut } = useStore()
+
+  const logoutAll = async () => {
+    if (isAdmin) await adminSignOut()
+    logoutUser()
+  }
   const [tab, setTab] = useState('public') // 'public' | 'private'
   const [loading, setLoading] = useState(true)
   const [threads, setThreads] = useState([])
@@ -107,7 +112,12 @@ export default function QA() {
 
     let tq = supabase
       .from('qa_threads')
-      .select('id, user_id, body, is_public, created_at')
+      // โหมดสาธารณะ: ไม่ดึง user_id มาเลย -> ไม่มีทางรู้ว่าใครถาม/ตอบ (นิรนามจริง)
+      .select(
+        tab === 'public'
+          ? 'id, body, is_public, created_at'
+          : 'id, user_id, body, is_public, created_at'
+      )
       .order('created_at', { ascending: false })
 
     if (tab === 'public') {
@@ -171,7 +181,15 @@ export default function QA() {
 
   return (
     <div className="px-4 pt-4">
-      <h1 className="mb-3 text-lg font-bold text-white">ถาม-ตอบ</h1>
+      <div className="mb-3 flex items-center justify-between">
+        <h1 className="text-lg font-bold text-white">ถาม-ตอบ</h1>
+        <button
+          onClick={logoutAll}
+          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+        >
+          ↩ ออกจากระบบ
+        </button>
+      </div>
 
       <div className="mb-4 flex rounded-xl bg-slate-800 p-1">
         <button
