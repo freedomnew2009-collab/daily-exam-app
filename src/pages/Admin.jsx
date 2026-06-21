@@ -317,7 +317,8 @@ function CategorySetting({ onSaved }) {
   const save = async () => {
     setSaving(true)
     setMsg('')
-    const clean = [...new Set(list.map((s) => s.trim()).filter(Boolean))]
+    // รวมข้อความที่พิมพ์ค้างไว้ในช่อง (เผื่อยังไม่ได้กด "เพิ่ม")
+    const clean = [...new Set([...list, newCat].map((s) => s.trim()).filter(Boolean))]
     const { error } = await supabase
       .from('app_settings')
       .upsert({ key: 'categories', value: JSON.stringify(clean), updated_at: new Date().toISOString() })
@@ -327,7 +328,8 @@ function CategorySetting({ onSaved }) {
       return
     }
     setList(clean)
-    setMsg('✅ บันทึกแล้ว')
+    setNewCat('')
+    setMsg(`✅ บันทึกแล้ว ${clean.length} หมวด`)
     onSaved?.(clean)
   }
 
@@ -1043,6 +1045,23 @@ export default function Admin() {
     setSection(secId)
     setDrawerOpen(false)
     window.scrollTo({ top: 0 })
+    // เปิดหน้าข้อสอบ -> ดึงหมวดล่าสุดจากฐานข้อมูลมาเสมอ (กันหมวดที่เพิ่งบันทึกไม่ขึ้น)
+    if (secId === 'exams') {
+      supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'categories')
+        .maybeSingle()
+        .then(({ data }) => {
+          let cats
+          try {
+            cats = data?.value ? JSON.parse(data.value) : []
+          } catch {
+            cats = []
+          }
+          setCategoryList(Array.isArray(cats) ? cats : [])
+        })
+    }
   }
   const sectionLabel = ADMIN_SECTIONS.find((m) => m.id === section)?.label || ''
   const [sets, setSets] = useState([])
