@@ -123,6 +123,24 @@ export default function QA() {
   const [threads, setThreads] = useState([])
   const [newQ, setNewQ] = useState('')
   const [posting, setPosting] = useState(false)
+  const [ph, setPh] = useState({ public: '', private: '' }) // ข้อความตัวอย่างที่แอดมินตั้งค่า
+
+  // โหลดข้อความ placeholder ในช่องถาม (ตั้งค่าจากหน้าแอดมิน)
+  useEffect(() => {
+    if (!isConfigured) return
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['qa_public_placeholder', 'qa_private_placeholder'])
+      const m = {}
+      for (const r of data || []) m[r.key] = r.value
+      setPh({
+        public: m['qa_public_placeholder'] || '',
+        private: m['qa_private_placeholder'] || '',
+      })
+    })()
+  }, [])
 
   const load = useCallback(async () => {
     if (!isConfigured) {
@@ -253,8 +271,8 @@ export default function QA() {
           rows={2}
           placeholder={
             tab === 'public'
-              ? 'ถามแบบสาธารณะ (ทุกคนเห็น แต่ไม่ระบุชื่อคุณ)…'
-              : 'ส่งคำถามถึงแอดมินแบบส่วนตัว…'
+              ? ph.public || 'ถามแบบสาธารณะ (ทุกคนเห็น แต่ไม่ระบุชื่อคุณ)…'
+              : ph.private || 'ส่งคำถามถึงแอดมินแบบส่วนตัว…'
           }
           className="w-full resize-none rounded-2xl border-2 border-violet-100 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-violet-400"
         />

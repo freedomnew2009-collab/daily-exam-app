@@ -260,6 +260,83 @@ function EncourageSetting() {
   )
 }
 
+// ตั้งค่าข้อความตัวอย่าง (placeholder) ในช่องพิมพ์คำถามหน้าถาม-ตอบ
+const QA_PUBLIC_KEY = 'qa_public_placeholder'
+const QA_PRIVATE_KEY = 'qa_private_placeholder'
+
+function QaPlaceholderSetting() {
+  const [pub, setPub] = useState('')
+  const [priv, setPriv] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', [QA_PUBLIC_KEY, QA_PRIVATE_KEY])
+      const m = {}
+      for (const r of data || []) m[r.key] = r.value
+      setPub(m[QA_PUBLIC_KEY] ?? '')
+      setPriv(m[QA_PRIVATE_KEY] ?? '')
+      setLoading(false)
+    })()
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    setMsg('')
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('app_settings').upsert([
+      { key: QA_PUBLIC_KEY, value: pub.trim(), updated_at: now },
+      { key: QA_PRIVATE_KEY, value: priv.trim(), updated_at: now },
+    ])
+    setMsg(error ? '❌ ' + error.message : '✅ บันทึกแล้ว')
+    setSaving(false)
+  }
+
+  if (loading)
+    return (
+      <Card>
+        <Spinner label="กำลังโหลด…" />
+      </Card>
+    )
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs text-slate-500">
+        ข้อความตัวอย่าง (placeholder) ที่จะแสดงจาง ๆ ในช่องพิมพ์คำถามหน้าถาม-ตอบ — เว้นว่างไว้เพื่อใช้ค่าเริ่มต้น
+      </p>
+      <label className="text-xs font-medium text-slate-500">ช่องถามสาธารณะ 🌐</label>
+      <input
+        value={pub}
+        onChange={(e) => setPub(e.target.value)}
+        placeholder="เช่น พิมพ์คำถามของคุณที่นี่ (ไม่ระบุชื่อ)…"
+        className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+      />
+      <label className="text-xs font-medium text-slate-500">ช่องถามแอดมิน (ส่วนตัว) 🔒</label>
+      <input
+        value={priv}
+        onChange={(e) => setPriv(e.target.value)}
+        placeholder="เช่น ส่งข้อความถึงแอดมินแบบส่วนตัว…"
+        className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+      />
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <Button onClick={save} disabled={saving} className="px-4 py-2 text-sm">
+          {saving ? 'กำลังบันทึก…' : '💾 บันทึกข้อความ'}
+        </Button>
+        {msg && (
+          <span className={`text-xs font-semibold ${msg.startsWith('✅') ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {msg}
+          </span>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 // ผลตรวจสำหรับแอดมิน — เลือกชุด แล้วดูคำตอบ + เหตุผลของผู้ใช้ทุกคน
 function ExamResults({ sets }) {
   const [setId, setSetId] = useState('')
@@ -766,6 +843,12 @@ export default function Admin() {
       <h2 className="mb-2 text-base font-bold text-slate-700">💛 ข้อความให้กำลังใจหลังทำข้อสอบ</h2>
       <div className="mb-4">
         <EncourageSetting />
+      </div>
+
+      {/* ข้อความในช่องถาม-ตอบ */}
+      <h2 className="mb-2 text-base font-bold text-slate-700">💬 ข้อความในช่องถาม-ตอบ</h2>
+      <div className="mb-4">
+        <QaPlaceholderSetting />
       </div>
 
       {/* บทความความรู้ */}
