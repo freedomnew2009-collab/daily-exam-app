@@ -4,6 +4,7 @@ import { useStore } from './store'
 import { supabase, isConfigured } from './lib/supabase'
 import { getLastSeen, showNotification, ensureNotifyPermission } from './lib/notify'
 import BottomNav from './components/BottomNav'
+import InstallButton from './components/InstallButton'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import Quiz from './pages/Quiz'
@@ -105,6 +106,7 @@ export default function App() {
       <>
         {!isConfigured && <ConfigWarning />}
         <Login />
+        <InstallButton />
       </>
     )
   }
@@ -125,6 +127,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <InstallButton />
       <BottomNav newCount={newCount} />
     </div>
   )
