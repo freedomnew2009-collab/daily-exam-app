@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { supabase } from './lib/supabase'
+import { supabase, isConfigured } from './lib/supabase'
 
 const Ctx = createContext(null)
 export const useStore = () => useContext(Ctx)
@@ -18,6 +18,38 @@ export function StoreProvider({ children }) {
   const [user, setUser] = useState(loadUser) // ผู้ทำข้อสอบ { id, username }
   const [adminSession, setAdminSession] = useState(null) // session ของ Supabase Auth (admin)
   const [ready, setReady] = useState(false)
+  const [suspended, setSuspended] = useState(false) // ผู้ใช้คนนี้ถูกแอดมินระงับหรือไม่
+
+  // เช็คสถานะ "ถูกระงับ" ของผู้ใช้ปัจจุบัน + ฟังแบบ realtime (แอดมินกดระงับแล้วเด้งทันที)
+  useEffect(() => {
+    if (!user || !isConfigured) {
+      setSuspended(false)
+      return
+    }
+    let active = true
+    supabase
+      .from('profiles')
+      .select('suspended')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active) setSuspended(Boolean(data?.suspended))
+      })
+
+    const ch = supabase
+      .channel('me_' + user.id)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        (payload) => setSuspended(Boolean(payload.new?.suspended))
+      )
+      .subscribe()
+
+    return () => {
+      active = false
+      supabase.removeChannel(ch)
+    }
+  }, [user])
 
   // โหลด session ของ admin (ถ้าเคย login ค้างไว้)
   useEffect(() => {
@@ -81,6 +113,7 @@ export function StoreProvider({ children }) {
     user,
     isAdmin: Boolean(adminSession),
     adminEmail: adminSession?.user?.email || null,
+    suspended,
     ready,
     loginUser,
     logoutUser,

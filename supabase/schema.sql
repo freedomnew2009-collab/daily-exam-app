@@ -9,8 +9,11 @@
 create table if not exists profiles (
   id uuid primary key default gen_random_uuid(),
   username text unique not null,
+  suspended boolean not null default false, -- แอดมินกดระงับได้
   created_at timestamptz not null default now()
 );
+-- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
+alter table profiles add column if not exists suspended boolean not null default false;
 
 -- ชุดข้อสอบ (วันละ ~5 ข้อ, ไม่อ้างอิงวันที่จริง ใช้ day_number)
 create table if not exists exam_sets (
@@ -95,11 +98,14 @@ alter table answers enable row level security;
 alter table qa_threads enable row level security;
 alter table qa_replies enable row level security;
 
--- profiles: ใครก็อ่าน/สร้างได้ (ระบบไม่ต้องยืนยันตัวตน)
+-- profiles: ใครก็อ่าน/สร้างได้ (ระบบไม่ต้องยืนยันตัวตน) แต่อัปเดต (ระงับ) ได้เฉพาะแอดมิน
 drop policy if exists p_profiles_sel on profiles;
 create policy p_profiles_sel on profiles for select using (true);
 drop policy if exists p_profiles_ins on profiles;
 create policy p_profiles_ins on profiles for insert with check (true);
+drop policy if exists p_profiles_upd on profiles;
+create policy p_profiles_upd on profiles for update
+  using (auth.uid() is not null) with check (auth.uid() is not null);
 
 -- exam_sets: อ่านได้ถ้าเผยแพร่แล้ว (หรือเป็นแอดมินที่ล็อกอิน)
 drop policy if exists p_sets_sel on exam_sets;
@@ -126,11 +132,19 @@ create policy p_attempts_sel on attempts for select using (true);
 
 -- answers: ไม่มี policy ตรง ๆ (เข้าถึงผ่าน RPC เท่านั้น เพื่อความเป็นส่วนตัวของเหตุผล)
 
--- qa: เขียนได้ทุกคน แต่การอ่านแยกระหว่าง public กับ private
+-- qa: เขียนได้ทุกคนที่ "ไม่ถูกระงับ"; แอดมินลบได้
 drop policy if exists p_threads_ins on qa_threads;
-create policy p_threads_ins on qa_threads for insert with check (true);
+create policy p_threads_ins on qa_threads for insert
+  with check (not exists (select 1 from profiles p where p.id = user_id and p.suspended));
 drop policy if exists p_replies_ins on qa_replies;
-create policy p_replies_ins on qa_replies for insert with check (true);
+create policy p_replies_ins on qa_replies for insert
+  with check (not exists (select 1 from profiles p where p.id = user_id and p.suspended));
+
+-- แอดมิน (login) ลบกระทู้/คำตอบได้
+drop policy if exists p_threads_del on qa_threads;
+create policy p_threads_del on qa_threads for delete using (auth.uid() is not null);
+drop policy if exists p_replies_del on qa_replies;
+create policy p_replies_del on qa_replies for delete using (auth.uid() is not null);
 
 -- อ่านกระทู้: anon เห็นเฉพาะ "สาธารณะ", แอดมิน (login) เห็นทั้งหมด
 -- ส่วนกระทู้ Private ของตัวเอง ผู้ใช้ดึงผ่าน RPC get_private_threads เท่านั้น
@@ -224,6 +238,10 @@ declare
   v_correct text;
   v_ok boolean;
 begin
+  if exists (select 1 from profiles where id = p_user_id and suspended) then
+    raise exception 'suspended: บัญชีนี้ถูกระงับการใช้งาน';
+  end if;
+
   select count(*) into v_total from questions where exam_set_id = p_exam_set_id;
 
   insert into attempts(user_id, exam_set_id, score, total, completed)

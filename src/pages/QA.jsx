@@ -11,7 +11,7 @@ function timeAgo(iso) {
   return `${Math.floor(s / 86400)} วันที่แล้ว`
 }
 
-function Thread({ thread, isAdmin, currentUserId, onReply }) {
+function Thread({ thread, isAdmin, currentUserId, onReply, onDeleteThread, onDeleteReply }) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -39,6 +39,15 @@ function Thread({ thread, isAdmin, currentUserId, onReply }) {
           {thread.is_public ? 'ไม่ระบุชื่อ' : isAdmin ? thread.username || 'ผู้ใช้' : 'คุณ'} ·{' '}
           {timeAgo(thread.created_at)}
         </span>
+        {isAdmin && (
+          <button
+            onClick={() => onDeleteThread(thread.id)}
+            className="ml-auto rounded-lg bg-rose-900/40 px-2 py-0.5 text-xs text-rose-300 hover:bg-rose-900/60"
+            title="ลบกระทู้นี้ทั้งหมด"
+          >
+            🗑 ลบ
+          </button>
+        )}
       </div>
       <p className="leading-relaxed text-white">{thread.body}</p>
 
@@ -56,6 +65,15 @@ function Thread({ thread, isAdmin, currentUserId, onReply }) {
                   </span>
                 )}
                 <span className="text-xs text-slate-600">{timeAgo(r.created_at)}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => onDeleteReply(r.id)}
+                    className="ml-auto text-xs text-rose-400 hover:underline"
+                    title="ลบคำตอบนี้"
+                  >
+                    🗑 ลบ
+                  </button>
+                )}
               </div>
               <p className="mt-0.5 text-sm leading-relaxed text-slate-200">{r.body}</p>
             </div>
@@ -178,6 +196,18 @@ export default function QA() {
     load()
   }
 
+  // แอดมินลบกระทู้/คำตอบ
+  const deleteThread = async (id) => {
+    if (!confirm('ลบกระทู้นี้และคำตอบทั้งหมด?')) return
+    await supabase.from('qa_threads').delete().eq('id', id)
+    load()
+  }
+  const deleteReply = async (id) => {
+    if (!confirm('ลบคำตอบนี้?')) return
+    await supabase.from('qa_replies').delete().eq('id', id)
+    load()
+  }
+
   return (
     <div className="px-4 pt-4">
       <div className="mb-3 flex items-center justify-between">
@@ -246,6 +276,8 @@ export default function QA() {
               isAdmin={isAdmin}
               currentUserId={user.id}
               onReply={reply}
+              onDeleteThread={deleteThread}
+              onDeleteReply={deleteReply}
             />
           ))}
         </div>

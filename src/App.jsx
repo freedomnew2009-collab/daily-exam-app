@@ -21,8 +21,32 @@ function ConfigWarning() {
   )
 }
 
+function Suspended() {
+  const { user, logoutUser, adminSignOut, isAdmin } = useStore()
+  const logout = async () => {
+    if (isAdmin) await adminSignOut()
+    logoutUser()
+  }
+  return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+      <div className="mb-4 text-6xl">🚫</div>
+      <h1 className="mb-2 text-xl font-bold text-white">บัญชีถูกระงับการใช้งาน</h1>
+      <p className="mb-1 text-slate-300">
+        บัญชี “{user?.username}” ถูกแอดมินระงับ จึงใช้งานแอปไม่ได้ชั่วคราว
+      </p>
+      <p className="mb-6 text-sm text-slate-500">หากคิดว่าผิดพลาด กรุณาติดต่อแอดมิน</p>
+      <button
+        onClick={logout}
+        className="rounded-xl border border-slate-700 px-5 py-3 text-slate-200 hover:bg-slate-800"
+      >
+        ↩ ออกจากระบบ
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
-  const { user, ready } = useStore()
+  const { user, ready, suspended, isAdmin } = useStore()
   const [newCount, setNewCount] = useState(0)
 
   // นับข้อสอบใหม่ที่ยังไม่เห็น
@@ -81,6 +105,9 @@ export default function App() {
       </>
     )
   }
+
+  // ถูกระงับ -> ใช้แอปไม่ได้ (ยกเว้นแอดมินไม่โดนล็อก)
+  if (suspended && !isAdmin) return <Suspended />
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-slate-950">

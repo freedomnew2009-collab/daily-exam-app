@@ -134,6 +134,7 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
 export default function Admin() {
   const { isAdmin, adminEmail, adminSignOut } = useStore()
   const [sets, setSets] = useState([])
+  const [users, setUsers] = useState([])
   const [privateCount, setPrivateCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
@@ -161,7 +162,7 @@ export default function Admin() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: setsData }, { count }] = await Promise.all([
+    const [{ data: setsData }, { count }, { data: usersData }] = await Promise.all([
       supabase
         .from('exam_sets')
         .select('id, day_number, title, published, question_count, created_at')
@@ -170,12 +171,24 @@ export default function Admin() {
         .from('qa_threads')
         .select('id', { count: 'exact', head: true })
         .eq('is_public', false),
+      supabase
+        .from('profiles')
+        .select('id, username, suspended, created_at')
+        .order('created_at', { ascending: true }),
     ])
     setSets(setsData || [])
     setPrivateCount(count || 0)
+    setUsers(usersData || [])
     setDayNumber(((setsData || []).reduce((m, s) => Math.max(m, s.day_number), 0) || 0) + 1)
     setLoading(false)
   }, [])
+
+  const toggleSuspend = async (u) => {
+    const action = u.suspended ? 'ปลดระงับ' : 'ระงับ'
+    if (!confirm(`${action}ผู้ใช้ "${u.username}"?`)) return
+    await supabase.from('profiles').update({ suspended: !u.suspended }).eq('id', u.id)
+    load()
+  }
 
   useEffect(() => {
     if (isAdmin) load()
@@ -428,6 +441,40 @@ export default function Admin() {
                   ลบ
                 </button>
               </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* จัดการผู้ใช้ */}
+      <h2 className="mb-2 mt-6 text-base font-semibold text-slate-200">
+        👥 ผู้ใช้ ({users.length})
+      </h2>
+      {users.length === 0 ? (
+        <p className="text-sm text-slate-500">ยังไม่มีผู้ใช้</p>
+      ) : (
+        <div className="space-y-2">
+          {users.map((u) => (
+            <Card key={u.id} className="flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-white">
+                  {u.username}{' '}
+                  {u.suspended && <Badge color="red">ถูกระงับ</Badge>}
+                </p>
+                <p className="text-xs text-slate-400">
+                  เข้าร่วม {new Date(u.created_at).toLocaleDateString('th-TH')}
+                </p>
+              </div>
+              <button
+                onClick={() => toggleSuspend(u)}
+                className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  u.suspended
+                    ? 'bg-emerald-600/30 text-emerald-200'
+                    : 'bg-rose-900/40 text-rose-300'
+                }`}
+              >
+                {u.suspended ? 'ปลดระงับ' : '🚫 ระงับ'}
+              </button>
             </Card>
           ))}
         </div>
