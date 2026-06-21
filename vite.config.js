@@ -1,0 +1,39 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
+
+// ชื่อ repo ใน GitHub Pages -> base path
+// ถ้าใช้ custom domain หรือ user page (เช่น username.github.io) ให้เปลี่ยนเป็น '/'
+const REPO = 'daily-exam-app'
+
+export default defineConfig({
+  base: `/${REPO}/`,
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['pwa-icon.svg'],
+      manifest: {
+        name: 'ข้อสอบรายวัน',
+        short_name: 'ข้อสอบ',
+        description: 'ทำข้อสอบวันละ 5 ข้อ พร้อมเฉลยและถาม-ตอบ',
+        theme_color: '#4f46e5',
+        background_color: '#0f172a',
+        display: 'standalone',
+        orientation: 'portrait',
+        start_url: `/${REPO}/`,
+        scope: `/${REPO}/`,
+        icons: [
+          {
+            src: 'pwa-icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+    }),
+  ],
+})
