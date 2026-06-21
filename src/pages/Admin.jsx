@@ -4,7 +4,7 @@ import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Button, Card, Badge, Spinner } from '../components/ui'
 
-const LETTERS = ['A', 'B', 'C', 'D']
+const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 function blankQuestion() {
   return {
