@@ -27,13 +27,16 @@ function Thread({ thread, isAdmin, currentUserId, onReply }) {
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-      <div className="mb-1 flex items-center gap-2">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
         <Badge color={thread.is_public ? 'indigo' : 'amber'}>
-          {thread.is_public ? '🌐 สาธารณะ' : '🔒 ถึงแอดมิน'}
+          {thread.is_public ? '🌐 สาธารณะ' : '🔒 Private'}
         </Badge>
+        {!thread.is_public && (
+          <span className="text-[11px] text-amber-300/80">เห็นเฉพาะคุณกับแอดมิน</span>
+        )}
         {/* ไม่ระบุชื่อผู้ถามในโหมดสาธารณะ */}
         <span className="text-xs text-slate-500">
-          {thread.is_public ? 'ไม่ระบุชื่อ' : isAdmin ? thread._username || 'ผู้ใช้' : 'คุณ'} ·{' '}
+          {thread.is_public ? 'ไม่ระบุชื่อ' : isAdmin ? thread.username || 'ผู้ใช้' : 'คุณ'} ·{' '}
           {timeAgo(thread.created_at)}
         </span>
       </div>
@@ -110,25 +113,21 @@ export default function QA() {
     }
     setLoading(true)
 
-    let tq = supabase
-      .from('qa_threads')
-      // โหมดสาธารณะ: ไม่ดึง user_id มาเลย -> ไม่มีทางรู้ว่าใครถาม/ตอบ (นิรนามจริง)
-      .select(
-        tab === 'public'
-          ? 'id, body, is_public, created_at'
-          : 'id, user_id, body, is_public, created_at'
-      )
-      .order('created_at', { ascending: false })
-
-    if (tab === 'public') {
-      tq = tq.eq('is_public', true)
-    } else {
-      // ส่วนตัว: แอดมินเห็นทั้งหมด, ผู้ใช้เห็นเฉพาะของตัวเอง
-      tq = tq.eq('is_public', false)
-      if (!isAdmin) tq = tq.eq('user_id', user.id)
+    // Private: ดึงผ่าน RPC (คืนเฉพาะของ user คนนี้ หรือทั้งหมดถ้าเป็นแอดมิน) พร้อม replies
+    if (tab === 'private') {
+      const { data } = await supabase.rpc('get_private_threads', { p_user_id: user.id })
+      setThreads(data || [])
+      setLoading(false)
+      return
     }
 
-    const { data: ths } = await tq
+    // Public: ไม่ดึง user_id มาเลย -> ไม่มีทางรู้ว่าใครถาม/ตอบ (นิรนามจริง)
+    const { data: ths } = await supabase
+      .from('qa_threads')
+      .select('id, body, is_public, created_at')
+      .eq('is_public', true)
+      .order('created_at', { ascending: false })
+
     const ids = (ths || []).map((t) => t.id)
     let replies = []
     if (ids.length) {
@@ -143,7 +142,7 @@ export default function QA() {
     for (const r of replies) (byThread[r.thread_id] ||= []).push(r)
     setThreads((ths || []).map((t) => ({ ...t, replies: byThread[t.id] || [] })))
     setLoading(false)
-  }, [tab, isAdmin, user.id])
+  }, [tab, user.id])
 
   useEffect(() => {
     load()
@@ -206,7 +205,7 @@ export default function QA() {
             tab === 'private' ? 'bg-indigo-600 text-white' : 'text-slate-300'
           }`}
         >
-          🔒 ถามแอดมิน
+          🔒 Private (ถามแอดมิน)
         </button>
       </div>
 

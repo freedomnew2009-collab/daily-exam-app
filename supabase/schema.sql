@@ -126,15 +126,25 @@ create policy p_attempts_sel on attempts for select using (true);
 
 -- answers: ไม่มี policy ตรง ๆ (เข้าถึงผ่าน RPC เท่านั้น เพื่อความเป็นส่วนตัวของเหตุผล)
 
--- qa: อ่าน/เขียนได้ทุกคน
-drop policy if exists p_threads_sel on qa_threads;
-create policy p_threads_sel on qa_threads for select using (true);
+-- qa: เขียนได้ทุกคน แต่การอ่านแยกระหว่าง public กับ private
 drop policy if exists p_threads_ins on qa_threads;
 create policy p_threads_ins on qa_threads for insert with check (true);
-drop policy if exists p_replies_sel on qa_replies;
-create policy p_replies_sel on qa_replies for select using (true);
 drop policy if exists p_replies_ins on qa_replies;
 create policy p_replies_ins on qa_replies for insert with check (true);
+
+-- อ่านกระทู้: anon เห็นเฉพาะ "สาธารณะ", แอดมิน (login) เห็นทั้งหมด
+-- ส่วนกระทู้ Private ของตัวเอง ผู้ใช้ดึงผ่าน RPC get_private_threads เท่านั้น
+drop policy if exists p_threads_sel on qa_threads;
+create policy p_threads_sel on qa_threads for select
+  using (is_public = true or auth.uid() is not null);
+
+-- อ่านคำตอบ: anon เห็นเฉพาะคำตอบของกระทู้สาธารณะ, แอดมินเห็นทั้งหมด
+drop policy if exists p_replies_sel on qa_replies;
+create policy p_replies_sel on qa_replies for select
+  using (
+    auth.uid() is not null
+    or exists (select 1 from qa_threads t where t.id = thread_id and t.is_public = true)
+  );
 
 -- ---------- ฟังก์ชัน (RPC) ----------
 
@@ -276,8 +286,43 @@ begin
 end;
 $$;
 
+-- ดึงกระทู้ Private — ผู้ใช้เห็นเฉพาะของตัวเอง, แอดมิน (login) เห็นทั้งหมด พร้อมชื่อผู้ถาม
+create or replace function get_private_threads(p_user_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_is_admin boolean := auth.uid() is not null;
+begin
+  return coalesce((
+    select jsonb_agg(thread_json order by created_at desc)
+    from (
+      select th.created_at,
+        jsonb_build_object(
+          'id', th.id,
+          'user_id', th.user_id,
+          'username', p.username,
+          'body', th.body,
+          'is_public', th.is_public,
+          'created_at', th.created_at,
+          'replies', coalesce((
+            select jsonb_agg(jsonb_build_object(
+              'id', r.id, 'body', r.body, 'is_admin', r.is_admin, 'created_at', r.created_at
+            ) order by r.created_at)
+            from qa_replies r where r.thread_id = th.id
+          ), '[]'::jsonb)
+        ) as thread_json
+      from qa_threads th
+      left join profiles p on p.id = th.user_id
+      where th.is_public = false
+        and (v_is_admin or th.user_id = p_user_id)
+    ) sub
+  ), '[]'::jsonb);
+end;
+$$;
+
 grant execute on function create_exam_set(int, text, boolean, jsonb) to authenticated;
 grant execute on function add_question(uuid, jsonb) to authenticated;
+grant execute on function get_private_threads(uuid) to anon, authenticated;
 grant execute on function submit_attempt(uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function get_review(uuid, uuid) to anon, authenticated;
 
