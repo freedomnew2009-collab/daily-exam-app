@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
+import { compressImage } from '../lib/image'
 import { Button, Card, Badge, Spinner, AutoTextarea, BigTextField, formatDuration } from '../components/ui'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
@@ -99,11 +100,12 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
     setImgErr('')
     setUploading(true)
     try {
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const up = await compressImage(file)
+      const ext = (up.name.split('.').pop() || 'jpg').toLowerCase()
       const path = `q/${crypto.randomUUID()}.${ext}`
       const { error } = await supabase.storage
         .from('question-images')
-        .upload(path, file, { contentType: file.type, upsert: false })
+        .upload(path, up, { contentType: up.type, upsert: false })
       if (error) throw error
       const { data } = supabase.storage.from('question-images').getPublicUrl(path)
       setField({ image_url: data.publicUrl })
@@ -130,11 +132,12 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
           setImgErr('ข้ามรูปที่ใหญ่เกิน 5MB บางรูป')
           continue
         }
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+        const up = await compressImage(file)
+        const ext = (up.name.split('.').pop() || 'jpg').toLowerCase()
         const path = `expl/${crypto.randomUUID()}.${ext}`
         const { error } = await supabase.storage
           .from('question-images')
-          .upload(path, file, { contentType: file.type, upsert: false })
+          .upload(path, up, { contentType: up.type, upsert: false })
         if (error) throw error
         const { data } = supabase.storage.from('question-images').getPublicUrl(path)
         urls.push(data.publicUrl)
@@ -885,11 +888,12 @@ function ArticlesAdmin() {
           setMsg('⚠️ ข้ามรูปที่ใหญ่เกิน 5MB บางรูป')
           continue
         }
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+        const up = await compressImage(file)
+        const ext = (up.name.split('.').pop() || 'jpg').toLowerCase()
         const path = `articles/${crypto.randomUUID()}.${ext}`
         const { error } = await supabase.storage
           .from('question-images')
-          .upload(path, file, { contentType: file.type, upsert: false })
+          .upload(path, up, { contentType: up.type, upsert: false })
         if (error) throw error
         const { data } = supabase.storage.from('question-images').getPublicUrl(path)
         urls.push(data.publicUrl)

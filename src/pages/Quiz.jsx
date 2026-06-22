@@ -169,7 +169,8 @@ export default function Quiz() {
             src={q.image_url}
             alt="รูปประกอบคำถาม"
             className="mb-4 max-h-72 w-full rounded-2xl border border-violet-100 object-contain shadow-sm"
-            loading="lazy"
+            loading="eager"
+            decoding="async"
           />
         )}
 
