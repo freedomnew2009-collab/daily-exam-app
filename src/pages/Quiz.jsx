@@ -10,7 +10,6 @@ export default function Quiz() {
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
-  const [examSet, setExamSet] = useState(null)
   const [questions, setQuestions] = useState([])
   const [idx, setIdx] = useState(0)
   const [responses, setResponses] = useState({}) // qid -> { selected, reason }
@@ -25,8 +24,7 @@ export default function Quiz() {
   useEffect(() => {
     ;(async () => {
       setLoading(true)
-      const [{ data: set }, { data: qs }, { data: setting }] = await Promise.all([
-        supabase.from('exam_sets').select('id, day_number, title').eq('id', setId).single(),
+      const [{ data: qs }, { data: setting }] = await Promise.all([
         supabase
           .from('questions')
           .select('id, order_index, question_text, image_url, category, choices')
@@ -37,7 +35,6 @@ export default function Quiz() {
       const mins = Math.max(1, Number(setting?.value) || 15)
       setTotalSeconds(mins * 60)
       setRemaining(mins * 60)
-      setExamSet(set)
       setQuestions(qs || [])
       setLoading(false)
     })()
@@ -158,10 +155,11 @@ export default function Quiz() {
 
       {/* คำถาม */}
       <div key={q.id} className="animate-pop flex-1">
-        <div className="flex items-center gap-2">
-          <p className="text-xs font-semibold text-violet-500">วันที่ {examSet?.day_number}</p>
-          {q.category && <Badge color="indigo">🏷️ {q.category}</Badge>}
-        </div>
+        {q.category && (
+          <div className="flex items-center gap-2">
+            <Badge color="indigo">🏷️ {q.category}</Badge>
+          </div>
+        )}
         <h2 className="mb-3 mt-1 text-lg font-bold leading-relaxed text-slate-800">
           {q.question_text}
         </h2>

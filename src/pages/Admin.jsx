@@ -1319,7 +1319,7 @@ export default function Admin() {
       if (isNewSet) {
         const { error } = await supabase.rpc('create_exam_set', {
           p_day: Number(dayNumber), // ลำดับภายในสำหรับเรียงชุด (ไม่แสดงให้กรอก)
-          p_title: title.trim() || `ชุดข้อสอบที่ ${dayNumber}`,
+          p_title: title.trim() || 'ชุดข้อสอบ',
           p_published: publish,
           p_questions: payload,
         })
