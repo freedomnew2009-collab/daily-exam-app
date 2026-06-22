@@ -1161,6 +1161,36 @@ export default function Admin() {
     return LETTERS.map((k) => ({ key: k, text: map[k] || '' }))
   }
 
+  // โหลดคำถาม+เฉลยของชุดหนึ่งกลับมาเป็น state ของฟอร์ม (ทุกข้อมี id ครบ)
+  const loadSetQuestions = async (setId) => {
+    const { data: qs } = await supabase
+      .from('questions')
+      .select('id, order_index, question_text, image_url, category, choices')
+      .eq('exam_set_id', setId)
+      .order('order_index', { ascending: true })
+    const ids = (qs || []).map((q) => q.id)
+    const keys = {}
+    if (ids.length) {
+      const { data: ks } = await supabase
+        .from('question_keys')
+        .select('question_id, correct_choice, explanation, explanation_images')
+        .in('question_id', ids)
+      for (const k of ks || []) keys[k.question_id] = k
+    }
+    return (qs || []).map((q) => ({
+      id: q.id,
+      question_text: q.question_text || '',
+      image_url: q.image_url || '',
+      category: q.category || '',
+      choices: normalizeChoices(q.choices),
+      correct_choice: keys[q.id]?.correct_choice || 'A',
+      explanation: keys[q.id]?.explanation || '',
+      explanation_images: Array.isArray(keys[q.id]?.explanation_images)
+        ? keys[q.id].explanation_images
+        : [],
+    }))
+  }
+
   // เลือกชุดเดิม -> โหลดคำถาม+เฉลยทั้งหมดกลับมาแก้ไข; เลือก "สร้างใหม่" -> ฟอร์มเปล่า
   const pickTarget = async (setId) => {
     setTargetSetId(setId)
@@ -1178,32 +1208,7 @@ export default function Admin() {
     }
     setFormLoading(true)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    const { data: qs } = await supabase
-      .from('questions')
-      .select('id, order_index, question_text, image_url, category, choices')
-      .eq('exam_set_id', setId)
-      .order('order_index', { ascending: true })
-    const ids = (qs || []).map((q) => q.id)
-    const keys = {}
-    if (ids.length) {
-      const { data: ks } = await supabase
-        .from('question_keys')
-        .select('question_id, correct_choice, explanation, explanation_images')
-        .in('question_id', ids)
-      for (const k of ks || []) keys[k.question_id] = k
-    }
-    const loaded = (qs || []).map((q) => ({
-      id: q.id,
-      question_text: q.question_text || '',
-      image_url: q.image_url || '',
-      category: q.category || '',
-      choices: normalizeChoices(q.choices),
-      correct_choice: keys[q.id]?.correct_choice || 'A',
-      explanation: keys[q.id]?.explanation || '',
-      explanation_images: Array.isArray(keys[q.id]?.explanation_images)
-        ? keys[q.id].explanation_images
-        : [],
-    }))
+    const loaded = await loadSetQuestions(setId)
     setQuestions(loaded.length ? loaded : [blankQuestion()])
     setFormLoading(false)
   }
@@ -1297,18 +1302,16 @@ export default function Admin() {
     }
     setSaving(true)
     try {
-      // เก็บ id ไว้เพื่อแยกว่า "แก้ของเดิม" หรือ "เพิ่มใหม่"
-      const items = filledQuestions.map((q) => ({
+      // ส่ง id ติดไปกับแต่ละข้อ เพื่อให้ฝั่ง DB แยก "แก้ของเดิม" (มี id) กับ "เพิ่มใหม่" (ไม่มี id)
+      const payload = filledQuestions.map((q) => ({
         id: q.id || null,
-        data: {
-          question_text: q.question_text.trim(),
-          image_url: q.image_url || '',
-          category: (q.category || '').trim(),
-          choices: q.choices.filter((c) => c.text.trim()),
-          correct_choice: q.correct_choice,
-          explanation: q.explanation.trim(),
-          explanation_images: Array.isArray(q.explanation_images) ? q.explanation_images : [],
-        },
+        question_text: q.question_text.trim(),
+        image_url: q.image_url || '',
+        category: (q.category || '').trim(),
+        choices: q.choices.filter((c) => c.text.trim()),
+        correct_choice: q.correct_choice,
+        explanation: q.explanation.trim(),
+        explanation_images: Array.isArray(q.explanation_images) ? q.explanation_images : [],
       }))
 
       if (isNewSet) {
@@ -1316,39 +1319,24 @@ export default function Admin() {
           p_day: Number(dayNumber), // ลำดับภายในสำหรับเรียงชุด (ไม่แสดงให้กรอก)
           p_title: title.trim() || `ชุดข้อสอบที่ ${dayNumber}`,
           p_published: publish,
-          p_questions: items.map((it) => it.data),
+          p_questions: payload,
         })
         if (error) throw error
         setMsg('✅ บันทึกชุดข้อสอบใหม่เรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
         setTitle('')
         setQuestions(Array.from({ length: 5 }, blankQuestion))
       } else {
-        // อัปเดตชื่อชุด แล้วแก้ของเดิม/เพิ่มข้อใหม่
-        await supabase
-          .from('exam_sets')
-          .update({ title: title.trim() || null })
-          .eq('id', targetSetId)
-
-        let updated = 0
-        let added = 0
-        for (const it of items) {
-          if (it.id) {
-            const { error } = await supabase.rpc('update_question', {
-              p_question_id: it.id,
-              p_question: it.data,
-            })
-            if (error) throw error
-            updated += 1
-          } else {
-            const { error } = await supabase.rpc('add_question', {
-              p_exam_set_id: targetSetId,
-              p_question: it.data,
-            })
-            if (error) throw error
-            added += 1
-          }
-        }
-        setMsg(`✅ บันทึกแล้ว — แก้ไข ${updated} ข้อ, เพิ่มใหม่ ${added} ข้อ`)
+        // บันทึกทั้งชุดในคราวเดียวแบบ atomic (upsert ตาม id — กดซ้ำก็ไม่เกิดข้อซ้ำ)
+        const { data, error } = await supabase.rpc('save_exam_set', {
+          p_set_id: targetSetId,
+          p_title: title.trim(),
+          p_questions: payload,
+        })
+        if (error) throw error
+        setMsg(`✅ บันทึกแล้ว — แก้ไข ${data?.updated ?? 0} ข้อ, เพิ่มใหม่ ${data?.added ?? 0} ข้อ`)
+        // โหลดกลับมาใหม่เพื่อให้ทุกข้อมี id ครบ (กันการกดบันทึกซ้ำแล้วเพิ่มซ้ำ)
+        const reloaded = await loadSetQuestions(targetSetId)
+        if (reloaded.length) setQuestions(reloaded)
       }
       await load()
     } catch (e) {
