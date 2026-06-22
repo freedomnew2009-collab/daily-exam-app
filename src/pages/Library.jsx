@@ -13,6 +13,7 @@ export default function Library() {
   const [sets, setSets] = useState([])
   const [attempts, setAttempts] = useState({})
   const [catBySet, setCatBySet] = useState({}) // setId -> [หมวดที่มีในชุดนั้น]
+  const [catOrder, setCatOrder] = useState([]) // ลำดับหมวดที่แอดมินสร้างไว้
   const [collapsed, setCollapsed] = useState({}) // category -> ซ่อนอยู่ไหม
 
   const logoutAll = async () => {
@@ -26,19 +27,29 @@ export default function Library() {
       return
     }
     setLoading(true)
-    const [{ data: setsData }, { data: attemptData }, { data: qData }] = await Promise.all([
-      supabase
-        .from('exam_sets')
-        .select('id, day_number, title, created_at, question_count')
-        .eq('published', true)
-        .order('day_number', { ascending: true }),
-      supabase
-        .from('attempts')
-        .select('exam_set_id, score, total, completed')
-        .eq('user_id', user.id)
-        .eq('completed', true),
-      supabase.from('questions').select('exam_set_id, category'),
-    ])
+    const [{ data: setsData }, { data: attemptData }, { data: qData }, { data: catSetting }] =
+      await Promise.all([
+        supabase
+          .from('exam_sets')
+          .select('id, day_number, title, created_at, question_count')
+          .eq('published', true)
+          .order('day_number', { ascending: true }),
+        supabase
+          .from('attempts')
+          .select('exam_set_id, score, total, completed')
+          .eq('user_id', user.id)
+          .eq('completed', true),
+        supabase.from('questions').select('exam_set_id, category'),
+        supabase.from('app_settings').select('value').eq('key', 'categories').maybeSingle(),
+      ])
+
+    let order
+    try {
+      order = catSetting?.value ? JSON.parse(catSetting.value) : []
+    } catch {
+      order = []
+    }
+    setCatOrder(Array.isArray(order) ? order : [])
 
     const map = {}
     for (const a of attemptData || []) {
@@ -76,9 +87,17 @@ export default function Library() {
     const setCats = catBySet[s.id]?.length ? catBySet[s.id] : [UNCATEGORIZED]
     for (const cat of setCats) (groups[cat] ||= []).push(s)
   }
-  const cats = Object.keys(groups).sort((a, b) =>
-    a === UNCATEGORIZED ? 1 : b === UNCATEGORIZED ? -1 : a.localeCompare(b, 'th')
-  )
+  // เรียงหมวดตามลำดับที่แอดมินสร้างไว้ก่อน, หมวดอื่น ๆ ที่ไม่อยู่ในลิสต์ต่อท้าย, "อื่น ๆ" ล่างสุด
+  const rank = (c) => {
+    if (c === UNCATEGORIZED) return Number.MAX_SAFE_INTEGER
+    const i = catOrder.indexOf(c)
+    return i === -1 ? Number.MAX_SAFE_INTEGER - 1 : i
+  }
+  const cats = Object.keys(groups).sort((a, b) => {
+    const ra = rank(a)
+    const rb = rank(b)
+    return ra !== rb ? ra - rb : a.localeCompare(b, 'th')
+  })
 
   return (
     <div className="px-4 pt-4">

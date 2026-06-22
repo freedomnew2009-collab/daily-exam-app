@@ -1115,23 +1115,6 @@ export default function Admin() {
     setSection(secId)
     setDrawerOpen(false)
     window.scrollTo({ top: 0 })
-    // เปิดหน้าข้อสอบ -> ดึงหมวดล่าสุดจากฐานข้อมูลมาเสมอ (กันหมวดที่เพิ่งบันทึกไม่ขึ้น)
-    if (secId === 'exams') {
-      supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'categories')
-        .maybeSingle()
-        .then(({ data }) => {
-          let cats
-          try {
-            cats = data?.value ? JSON.parse(data.value) : []
-          } catch {
-            cats = []
-          }
-          setCategoryList(Array.isArray(cats) ? cats : [])
-        })
-    }
   }
   const sectionLabel = ADMIN_SECTIONS.find((m) => m.id === section)?.label || ''
   const [sets, setSets] = useState([])
@@ -1257,6 +1240,25 @@ export default function Admin() {
   useEffect(() => {
     if (isAdmin) load()
   }, [isAdmin, load])
+
+  // ดึงรายการหมวดล่าสุดจาก DB ทุกครั้งที่เข้าหน้าข้อสอบ (กันหมวดที่เพิ่งบันทึกไม่ขึ้นใน dropdown)
+  useEffect(() => {
+    if (!isAdmin || section !== 'exams') return
+    supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'categories')
+      .maybeSingle()
+      .then(({ data }) => {
+        let cats
+        try {
+          cats = data?.value ? JSON.parse(data.value) : []
+        } catch {
+          cats = []
+        }
+        setCategoryList(Array.isArray(cats) ? cats : [])
+      })
+  }, [isAdmin, section])
 
   if (!isAdmin) return <AdminLogin />
   if (loading) return <Spinner />
@@ -1471,13 +1473,13 @@ export default function Admin() {
                 onChange={(e) => setPublishEdit(e.target.checked)}
                 className="h-4 w-4 accent-violet-500"
               />
-              เผยแพร่ (พับลิค) ให้ผู้ใช้เห็น
+              เผยแพร่ (Public) ให้ผู้ใช้เห็น
               <span
                 className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
                   publishEdit ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                 }`}
               >
-                {publishEdit ? 'พับลิค' : 'ซ่อน (ฉบับร่าง)'}
+                {publishEdit ? 'Public' : 'Hidden (ฉบับร่าง)'}
               </span>
             </label>
           </>
