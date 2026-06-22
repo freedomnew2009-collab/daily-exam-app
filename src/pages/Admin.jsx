@@ -1144,6 +1144,7 @@ export default function Admin() {
   const [title, setTitle] = useState('')
   const [categoryList, setCategoryList] = useState([]) // หมวดที่ตั้งไว้ (สำหรับ dropdown)
   const [publish, setPublish] = useState(true)
+  const [publishEdit, setPublishEdit] = useState(true) // สถานะเผยแพร่ของชุดที่กำลังแก้ไข
   const [questions, setQuestions] = useState(() =>
     Array.from({ length: 5 }, blankQuestion)
   )
@@ -1205,6 +1206,7 @@ export default function Admin() {
     if (tgt) {
       setTitle(tgt.title || '')
       setDayNumber(tgt.day_number)
+      setPublishEdit(tgt.published)
     }
     setFormLoading(true)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1333,7 +1335,12 @@ export default function Admin() {
           p_questions: payload,
         })
         if (error) throw error
-        setMsg(`✅ บันทึกแล้ว — แก้ไข ${data?.updated ?? 0} ข้อ, เพิ่มใหม่ ${data?.added ?? 0} ข้อ`)
+        // อัปเดตสถานะเผยแพร่/ซ่อนของชุด
+        await supabase.from('exam_sets').update({ published: publishEdit }).eq('id', targetSetId)
+        setMsg(
+          `✅ บันทึกแล้ว — แก้ไข ${data?.updated ?? 0} ข้อ, เพิ่มใหม่ ${data?.added ?? 0} ข้อ` +
+            (publishEdit ? ' · เผยแพร่อยู่' : ' · ซ่อนอยู่ (ฉบับร่าง)')
+        )
         // โหลดกลับมาใหม่เพื่อให้ทุกข้อมี id ครบ (กันการกดบันทึกซ้ำแล้วเพิ่มซ้ำ)
         const reloaded = await loadSetQuestions(targetSetId)
         if (reloaded.length) setQuestions(reloaded)
@@ -1453,9 +1460,27 @@ export default function Admin() {
             เผยแพร่ทันที (ผู้ใช้เห็น + แจ้งเตือนข้อสอบใหม่)
           </label>
         ) : (
-          <p className="rounded-xl bg-violet-50 p-2.5 text-xs text-violet-700">
-            กำลังแก้ไขชุดเดิม — แก้ข้อที่มีอยู่ได้เลย หรือกด "+ เพิ่มคำถาม" เพื่อเพิ่มข้อใหม่ แล้วกดบันทึก
-          </p>
+          <>
+            <p className="rounded-xl bg-violet-50 p-2.5 text-xs text-violet-700">
+              กำลังแก้ไขชุดเดิม — แก้ข้อที่มีอยู่ได้เลย หรือกด "+ เพิ่มคำถาม" เพื่อเพิ่มข้อใหม่ แล้วกดบันทึก
+            </p>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={publishEdit}
+                onChange={(e) => setPublishEdit(e.target.checked)}
+                className="h-4 w-4 accent-violet-500"
+              />
+              เผยแพร่ (พับลิค) ให้ผู้ใช้เห็น
+              <span
+                className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  publishEdit ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                }`}
+              >
+                {publishEdit ? 'พับลิค' : 'ซ่อน (ฉบับร่าง)'}
+              </span>
+            </label>
+          </>
         )}
       </Card>
 
