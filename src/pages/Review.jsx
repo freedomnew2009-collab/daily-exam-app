@@ -179,13 +179,14 @@ export default function Review() {
                   {(it.explanation_images || []).length > 0 && (
                     <div className="mt-2 space-y-2">
                       {it.explanation_images.map((url) => (
-                        <img
-                          key={url}
-                          src={url}
-                          alt="รูปประกอบคำอธิบาย"
-                          className="w-full rounded-xl border border-violet-100 object-contain"
-                          loading="lazy"
-                        />
+                        <a key={url} href={url} target="_blank" rel="noreferrer" className="block">
+                          <img
+                            src={url}
+                            alt="รูปประกอบคำอธิบาย"
+                            className="block max-h-80 w-full rounded-xl border border-violet-100 object-contain"
+                            loading="lazy"
+                          />
+                        </a>
                       ))}
                     </div>
                   )}
