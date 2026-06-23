@@ -134,7 +134,7 @@ export default function PracticeQuiz({ mode }) {
         {q.category && (
           <Badge color="indigo">🏷️ {q.category}</Badge>
         )}
-        <h2 className="mb-3 mt-1 text-lg font-bold leading-relaxed text-slate-800">{q.question_text}</h2>
+        <h2 className="mb-3 mt-1 whitespace-pre-wrap break-words text-lg font-bold leading-relaxed text-slate-800">{q.question_text}</h2>
 
         {q.image_url && (
           <img
@@ -174,7 +174,7 @@ export default function PracticeQuiz({ mode }) {
                 >
                   {c.key}
                 </span>
-                <span className="text-sm text-slate-700">{c.text}</span>
+                <span className="whitespace-pre-wrap break-words text-sm text-slate-700">{c.text}</span>
                 {revealed && isCorrect && <span className="ml-auto text-emerald-600">✓</span>}
                 {revealed && isPicked && !isCorrect && <span className="ml-auto text-rose-500">✗</span>}
               </button>

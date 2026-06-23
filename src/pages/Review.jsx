@@ -128,7 +128,7 @@ export default function Review() {
                 </span>
                 {correct ? <Badge color="green">✅ ตอบถูก</Badge> : <Badge color="red">❌ ตอบผิด</Badge>}
               </div>
-              <p className="mb-3 font-bold leading-relaxed text-slate-800">{it.question_text}</p>
+              <p className="mb-3 whitespace-pre-wrap break-words font-bold leading-relaxed text-slate-800">{it.question_text}</p>
 
               {it.image_url && (
                 <img
@@ -155,7 +155,7 @@ export default function Review() {
                       }`}
                     >
                       <span className="font-bold">{c.key}</span>
-                      <span className="flex-1">{c.text}</span>
+                      <span className="flex-1 whitespace-pre-wrap break-words">{c.text}</span>
                       {isCorrect && <span>✅</span>}
                       {isYours && !isCorrect && <span className="text-xs">← คุณเลือก</span>}
                     </div>

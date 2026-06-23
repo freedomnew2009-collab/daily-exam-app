@@ -160,7 +160,7 @@ export default function Quiz() {
             <Badge color="indigo">🏷️ {q.category}</Badge>
           </div>
         )}
-        <h2 className="mb-3 mt-1 text-lg font-bold leading-relaxed text-slate-800">
+        <h2 className="mb-3 mt-1 whitespace-pre-wrap break-words text-lg font-bold leading-relaxed text-slate-800">
           {q.question_text}
         </h2>
 
@@ -196,7 +196,7 @@ export default function Quiz() {
                 >
                   {c.key}
                 </span>
-                <span className="text-sm text-slate-700">{c.text}</span>
+                <span className="whitespace-pre-wrap break-words text-sm text-slate-700">{c.text}</span>
               </button>
             )
           })}

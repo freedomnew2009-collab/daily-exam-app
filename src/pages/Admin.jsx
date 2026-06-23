@@ -219,11 +219,11 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
       {imgErr && <p className="text-xs font-medium text-rose-500">{imgErr}</p>}
       <div className="space-y-2">
         {q.choices.map((c, i) => (
-          <div key={c.key} className="flex items-center gap-2">
+          <div key={c.key} className="flex items-start gap-2">
             <button
               type="button"
               onClick={() => setField({ correct_choice: c.key })}
-              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
+              className={`mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
                 q.correct_choice === c.key
                   ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
                   : 'bg-violet-100 text-violet-500'
@@ -232,11 +232,12 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
             >
               {c.key}
             </button>
-            <input
+            <AutoTextarea
               value={c.text}
+              minRows={1}
               onChange={(e) => setChoice(i, e.target.value)}
               placeholder={`ตัวเลือก ${c.key}`}
-              className="flex-1 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+              className="flex-1 resize-none rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
             />
           </div>
         ))}
@@ -799,7 +800,7 @@ function ExamResults({ sets }) {
                 <div className="space-y-2 border-t border-violet-100 bg-violet-50/40 p-3">
                   {(a.answers || []).map((ans) => (
                     <div key={ans.order_index} className="rounded-lg bg-white p-2.5 text-sm shadow-sm">
-                      <p className="font-semibold text-slate-700">
+                      <p className="whitespace-pre-wrap break-words font-semibold text-slate-700">
                         ข้อ {ans.order_index + 1}. {ans.question_text}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
