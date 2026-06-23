@@ -17,6 +17,8 @@ import Quiz from './pages/Quiz'
 import Review from './pages/Review'
 import Practice from './pages/Practice'
 import PracticeQuiz from './pages/PracticeQuiz'
+import CategoryQuiz from './pages/CategoryQuiz'
+import CategoryReview from './pages/CategoryReview'
 import QA from './pages/QA'
 import Admin from './pages/Admin'
 import Articles, { ArticleView } from './pages/Articles'
@@ -166,7 +168,8 @@ export default function App() {
           <Route path="/practice" element={<Practice />} />
           <Route path="/practice/wrong" element={<PracticeQuiz mode="wrong" />} />
           <Route path="/practice/category/:category" element={<PracticeQuiz mode="category" />} />
-          <Route path="/practice/set/:setId/:category" element={<PracticeQuiz mode="setcat" />} />
+          <Route path="/category-quiz/:category" element={<CategoryQuiz />} />
+          <Route path="/category-review/:attemptId" element={<CategoryReview />} />
           <Route path="/qa" element={<QA />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/" replace />} />
