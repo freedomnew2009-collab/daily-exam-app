@@ -12,7 +12,7 @@ export default function Library() {
   const [loading, setLoading] = useState(true)
   const [sets, setSets] = useState([])
   const [attempts, setAttempts] = useState({})
-  const [catBySet, setCatBySet] = useState({}) // setId -> [หมวดที่มีในชุดนั้น]
+  const [catCount, setCatCount] = useState({}) // setId -> { หมวด -> จำนวนข้อในหมวดนั้น }
   const [catOrder, setCatOrder] = useState([]) // ลำดับหมวดที่แอดมินสร้างไว้
   const [collapsed, setCollapsed] = useState({}) // category -> ซ่อนอยู่ไหม
 
@@ -60,18 +60,16 @@ export default function Library() {
       map[a.exam_set_id] = cur
     }
 
-    // รวมหมวดที่ปรากฏในแต่ละชุด (เฉพาะข้อที่มีหมวด)
-    const cats = {}
+    // นับจำนวนข้อในแต่ละหมวดของแต่ละชุด (ข้อที่ไม่มีหมวด -> "อื่น ๆ")
+    const counts = {}
     for (const q of qData || []) {
-      if (!q.category) continue
-      ;(cats[q.exam_set_id] ||= new Set()).add(q.category)
+      const cat = (q.category && q.category.trim()) || UNCATEGORIZED
+      ;(counts[q.exam_set_id] ||= {})[cat] = (counts[q.exam_set_id]?.[cat] || 0) + 1
     }
-    const catMap = {}
-    for (const k of Object.keys(cats)) catMap[k] = [...cats[k]]
 
     setSets(setsData || [])
     setAttempts(map)
-    setCatBySet(catMap)
+    setCatCount(counts)
     setLoading(false)
   }, [user.id])
 
@@ -81,11 +79,18 @@ export default function Library() {
 
   if (loading) return <Spinner />
 
-  // จัดกลุ่มตามหมวดของคำถาม — ชุดเดียวอาจอยู่ได้หลายหมวด
+  // จัดกลุ่มตามหมวดของคำถาม — ชุดเดียวอาจอยู่ได้หลายหมวด, เก็บจำนวนข้อในหมวดนั้นด้วย
   const groups = {}
   for (const s of sets) {
-    const setCats = catBySet[s.id]?.length ? catBySet[s.id] : [UNCATEGORIZED]
-    for (const cat of setCats) (groups[cat] ||= []).push(s)
+    const counts = catCount[s.id]
+    if (counts && Object.keys(counts).length) {
+      for (const [cat, n] of Object.entries(counts)) {
+        ;(groups[cat] ||= []).push({ set: s, count: n })
+      }
+    } else {
+      // ชุดที่ยังไม่มีข้อมูลคำถาม -> ไปอยู่หมวด "อื่น ๆ"
+      ;(groups[UNCATEGORIZED] ||= []).push({ set: s, count: s.question_count || 0 })
+    }
   }
   // เรียงหมวดตามลำดับที่แอดมินสร้างไว้ก่อน, หมวดอื่น ๆ ที่ไม่อยู่ในลิสต์ต่อท้าย, "อื่น ๆ" ล่างสุด
   const rank = (c) => {
@@ -125,6 +130,7 @@ export default function Library() {
           {cats.map((cat) => {
             const list = groups[cat]
             const isCollapsed = collapsed[cat]
+            const totalQ = list.reduce((sum, item) => sum + (item.count || 0), 0)
             return (
               <section key={cat}>
                 <button
@@ -132,15 +138,14 @@ export default function Library() {
                   className="mb-2 flex w-full items-center gap-2"
                 >
                   <span className="text-base font-bold text-slate-700">📁 {cat}</span>
-                  <Badge color="indigo">{list.length}</Badge>
+                  <Badge color="indigo">{totalQ} ข้อ</Badge>
                   <span className="ml-auto text-xs text-slate-400">{isCollapsed ? '▼ แสดง' : '▲ ซ่อน'}</span>
                 </button>
 
                 {!isCollapsed && (
                   <div className="space-y-3">
-                    {list.map((s) => {
-                      const a = attempts[s.id]
-                      const done = a && a.count > 0
+                    {list.map(({ set: s, count }) => {
+                      const done = attempts[s.id]?.count > 0
                       return (
                         <Card key={s.id} className="animate-rise">
                           <div className="flex items-start gap-3">
@@ -148,30 +153,24 @@ export default function Library() {
                               📝
                             </div>
                             <div className="min-w-0 flex-1">
-                              {done && (
-                                <Badge color="green">
-                                  🏆 สูงสุด {a.best}/{a.total ?? s.question_count}
-                                </Badge>
-                              )}
+                              {done && <Badge color="green">✓ เคยทำชุดนี้แล้ว</Badge>}
                               <p className="mt-0.5 truncate font-bold text-slate-800">
                                 {s.title || 'ชุดข้อสอบ'}
                               </p>
-                              <p className="text-xs text-slate-400">{s.question_count ?? 5} ข้อ</p>
+                              <p className="text-xs text-slate-400">
+                                {count} ข้อในหมวด “{cat}”
+                              </p>
                             </div>
                           </div>
 
-                          <div className="mt-3 flex gap-2">
-                            <Button className="flex-1" onClick={() => navigate(`/quiz/${s.id}`)}>
-                              {done ? '🔁 ทำใหม่' : '🚀 เริ่มทำข้อสอบ'}
-                            </Button>
+                          <div className="mt-3">
                             <Button
-                              variant={done ? 'outline' : 'ghost'}
-                              className="flex-1"
-                              disabled={!done}
-                              onClick={() => done && navigate(`/review/${s.id}`)}
-                              title={done ? '' : 'ต้องทำข้อสอบก่อนถึงดูเฉลยได้'}
+                              className="w-full"
+                              onClick={() =>
+                                navigate(`/practice/set/${s.id}/${encodeURIComponent(cat)}`)
+                              }
                             >
-                              {done ? '📖 ดูเฉลย' : '🔒 ดูเฉลย'}
+                              🎯 ทำเฉพาะข้อในหมวดนี้ ({count} ข้อ)
                             </Button>
                           </div>
                         </Card>

@@ -9,6 +9,7 @@ export default function PracticeQuiz({ mode }) {
   const params = useParams()
   const navigate = useNavigate()
   const category = params.category || null
+  const setId = params.setId || null
 
   const [loading, setLoading] = useState(true)
   const [questions, setQuestions] = useState([])
@@ -20,13 +21,20 @@ export default function PracticeQuiz({ mode }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res =
-      mode === 'wrong'
-        ? await supabase.rpc('get_wrong_questions', { p_user_id: user.id })
-        : await supabase.rpc('get_category_questions', { p_category: category, p_limit: 10 })
+    let res
+    if (mode === 'wrong') {
+      res = await supabase.rpc('get_wrong_questions', { p_user_id: user.id })
+    } else if (mode === 'setcat') {
+      res = await supabase.rpc('get_set_category_questions', {
+        p_exam_set_id: setId,
+        p_category: category,
+      })
+    } else {
+      res = await supabase.rpc('get_category_questions', { p_category: category, p_limit: 10 })
+    }
     setQuestions(Array.isArray(res.data) ? res.data : [])
     setLoading(false)
-  }, [mode, category, user.id])
+  }, [mode, category, setId, user.id])
 
   useEffect(() => {
     load()
@@ -42,6 +50,8 @@ export default function PracticeQuiz({ mode }) {
   }
 
   const title = mode === 'wrong' ? '🔁 ทบทวนข้อที่ตอบผิด' : `🎯 ${category || 'ติวแยกหมวด'}`
+  const backTo = mode === 'setcat' ? '/library' : '/practice'
+  const backLabel = mode === 'setcat' ? '↩ กลับคลังข้อสอบ' : '↩ กลับศูนย์ฝึกซ้อม'
 
   if (loading) return <Spinner label="กำลังเตรียมข้อสอบ…" />
 
@@ -53,8 +63,8 @@ export default function PracticeQuiz({ mode }) {
           title={mode === 'wrong' ? 'ไม่มีข้อผิดให้ทบทวนแล้ว!' : 'หมวดนี้ยังไม่มีข้อสอบ'}
           hint={mode === 'wrong' ? 'เก่งมาก ตอบถูกหมดเลย 👏' : 'ลองเลือกหมวดอื่น หรือรอแอดมินเพิ่มข้อสอบ'}
         />
-        <Button variant="outline" className="mt-4 w-full" onClick={() => navigate('/practice')}>
-          ↩ กลับศูนย์ฝึกซ้อม
+        <Button variant="outline" className="mt-4 w-full" onClick={() => navigate(backTo)}>
+          {backLabel}
         </Button>
       </div>
     )
@@ -77,7 +87,7 @@ export default function PracticeQuiz({ mode }) {
           <Button className="flex-1" onClick={restart}>
             🔁 ฝึกอีกครั้ง
           </Button>
-          <Button variant="outline" className="flex-1" onClick={() => navigate('/practice')}>
+          <Button variant="outline" className="flex-1" onClick={() => navigate(backTo)}>
             ↩ กลับ
           </Button>
         </div>
@@ -109,7 +119,7 @@ export default function PracticeQuiz({ mode }) {
       {/* แถบบน */}
       <div className="mb-3 flex items-center gap-3">
         <button
-          onClick={() => navigate('/practice')}
+          onClick={() => navigate(backTo)}
           className="flex-shrink-0 rounded-xl bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600"
         >
           ↩

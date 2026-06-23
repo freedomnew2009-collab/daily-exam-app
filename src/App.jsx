@@ -166,6 +166,7 @@ export default function App() {
           <Route path="/practice" element={<Practice />} />
           <Route path="/practice/wrong" element={<PracticeQuiz mode="wrong" />} />
           <Route path="/practice/category/:category" element={<PracticeQuiz mode="category" />} />
+          <Route path="/practice/set/:setId/:category" element={<PracticeQuiz mode="setcat" />} />
           <Route path="/qa" element={<QA />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/" replace />} />
