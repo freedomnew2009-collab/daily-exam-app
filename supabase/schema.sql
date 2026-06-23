@@ -44,12 +44,14 @@ create table if not exists questions (
   question_text text not null,
   image_url text, -- รูปประกอบคำถาม (ไม่บังคับ)
   category text,  -- หมวดของคำถามแต่ละข้อ (ไม่บังคับ)
-  choices jsonb not null default '[]'::jsonb, -- [{key,text}]
+  choices jsonb not null default '[]'::jsonb, -- mc:[{key,text}] · match:[{key,left,right}] · fill:[]
+  q_type text not null default 'mc', -- ชนิดข้อสอบ: mc | fill | match
   created_at timestamptz not null default now()
 );
 -- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
 alter table questions add column if not exists image_url text;
 alter table questions add column if not exists category text;
+alter table questions add column if not exists q_type text not null default 'mc';
 
 -- เฉลย (แยกตาราง — อ่านได้เฉพาะแอดมิน / ผ่าน RPC หลังทำเสร็จ)
 create table if not exists question_keys (
@@ -245,9 +247,9 @@ begin
   returning id into v_set_id;
 
   for rec in select * from jsonb_array_elements(p_questions) loop
-    insert into questions(exam_set_id, order_index, question_text, choices, image_url, category)
-    values (v_set_id, v_idx, rec->>'question_text', rec->'choices',
-            nullif(rec->>'image_url', ''), nullif(btrim(rec->>'category'), ''))
+    insert into questions(exam_set_id, order_index, question_text, q_type, choices, image_url, category)
+    values (v_set_id, v_idx, rec->>'question_text', coalesce(nullif(rec->>'q_type', ''), 'mc'),
+            rec->'choices', nullif(rec->>'image_url', ''), nullif(btrim(rec->>'category'), ''))
     returning id into v_q_id;
 
     insert into question_keys(question_id, correct_choice, explanation, explanation_images)
@@ -277,9 +279,9 @@ begin
   select coalesce(max(order_index), -1) + 1 into v_idx
     from questions where exam_set_id = p_exam_set_id;
 
-  insert into questions(exam_set_id, order_index, question_text, choices, image_url, category)
-  values (p_exam_set_id, v_idx, p_question->>'question_text', p_question->'choices',
-          nullif(p_question->>'image_url', ''), nullif(btrim(p_question->>'category'), ''))
+  insert into questions(exam_set_id, order_index, question_text, q_type, choices, image_url, category)
+  values (p_exam_set_id, v_idx, p_question->>'question_text', coalesce(nullif(p_question->>'q_type', ''), 'mc'),
+          p_question->'choices', nullif(p_question->>'image_url', ''), nullif(btrim(p_question->>'category'), ''))
   returning id into v_q_id;
 
   insert into question_keys(question_id, correct_choice, explanation, explanation_images)
@@ -292,6 +294,113 @@ begin
 end;
 $$;
 
+-- ===== ตัวช่วยตรวจคำตอบ (รองรับ mc / fill / match) =====
+-- ทำให้ข้อความเทียบกันแบบยืดหยุ่น: ตัดช่องว่างหัวท้าย, ยุบช่องว่างซ้ำ, ตัวพิมพ์เล็ก
+create or replace function normalize_text(t text)
+returns text language sql immutable as $$
+  select lower(btrim(regexp_replace(coalesce(t, ''), '\s+', ' ', 'g')));
+$$;
+
+-- คะแนนเต็มของข้อหนึ่ง: จับคู่ = จำนวนคู่, อื่น ๆ = 1
+create or replace function question_points(p_q_type text, p_choices jsonb)
+returns int language sql immutable as $$
+  select case when coalesce(p_q_type, 'mc') = 'match'
+    then greatest(1, coalesce(jsonb_array_length(p_choices), 0))
+    else 1 end;
+$$;
+
+-- ตรวจคำตอบหนึ่งข้อ -> {gained, possible, is_correct}
+create or replace function grade_answer(p_qid uuid, p_selected text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_type text; v_choices jsonb; v_correct text;
+  g int := 0; p int := 1; v_norm text; v_accepts jsonb; v_map jsonb;
+begin
+  select coalesce(q.q_type, 'mc'), q.choices, k.correct_choice
+    into v_type, v_choices, v_correct
+    from questions q left join question_keys k on k.question_id = q.id
+    where q.id = p_qid;
+  if not found then
+    return jsonb_build_object('gained', 0, 'possible', 1, 'is_correct', false);
+  end if;
+
+  if v_type = 'fill' then
+    p := 1;
+    v_norm := normalize_text(p_selected);
+    begin v_accepts := v_correct::jsonb; exception when others then v_accepts := null; end;
+    if v_accepts is null or jsonb_typeof(v_accepts) <> 'array' then
+      v_accepts := to_jsonb(array[coalesce(v_correct, '')]);
+    end if;
+    if v_norm <> '' and exists (
+      select 1 from jsonb_array_elements_text(v_accepts) a where normalize_text(a) = v_norm
+    ) then g := 1; end if;
+
+  elsif v_type = 'match' then
+    p := greatest(1, coalesce(jsonb_array_length(v_choices), 0));
+    begin v_map := p_selected::jsonb; exception when others then v_map := '{}'::jsonb; end;
+    if v_map is null or jsonb_typeof(v_map) <> 'object' then v_map := '{}'::jsonb; end if;
+    select count(*) into g
+      from jsonb_array_elements(v_choices) e
+      where normalize_text(e->>'right') <> ''
+        and normalize_text(v_map ->> (e->>'key')) = normalize_text(e->>'right');
+
+  else -- mc
+    p := 1;
+    if v_correct is not null and v_correct = p_selected then g := 1; end if;
+  end if;
+
+  return jsonb_build_object('gained', g, 'possible', p, 'is_correct', (p > 0 and g >= p));
+end;
+$$;
+
+-- ตัวเลือกที่ "ปลอดภัย" สำหรับส่งให้หน้าทำข้อสอบ (ไม่หลุดเฉลย)
+create or replace function safe_choices(p_q_type text, p_choices jsonb)
+returns jsonb
+language plpgsql volatile as $$
+begin
+  if coalesce(p_q_type, 'mc') = 'match' then
+    return jsonb_build_object(
+      'left', coalesce((
+        select jsonb_agg(jsonb_build_object('key', e->>'key', 'text', e->>'left') order by ord)
+        from jsonb_array_elements(p_choices) with ordinality as t(e, ord)
+      ), '[]'::jsonb),
+      'right', coalesce((
+        select jsonb_agg(jsonb_build_object('text', e->>'right') order by random())
+        from jsonb_array_elements(p_choices) e
+      ), '[]'::jsonb)
+    );
+  elsif coalesce(p_q_type, 'mc') = 'fill' then
+    return '[]'::jsonb;
+  else
+    return coalesce(p_choices, '[]'::jsonb);
+  end if;
+end;
+$$;
+grant execute on function normalize_text(text) to anon, authenticated;
+grant execute on function question_points(text, jsonb) to anon, authenticated;
+grant execute on function grade_answer(uuid, text) to anon, authenticated;
+grant execute on function safe_choices(text, jsonb) to anon, authenticated;
+
+-- โหลดข้อสอบ "ชุดรายวัน" แบบปลอดภัย (ไม่หลุดเฉลย match)
+create or replace function get_set_quiz(p_exam_set_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', q.id, 'question_text', q.question_text, 'image_url', q.image_url,
+      'category', q.category, 'q_type', coalesce(q.q_type, 'mc'),
+      'choices', safe_choices(coalesce(q.q_type, 'mc'), q.choices)
+    ) order by q.order_index), '[]'::jsonb)
+  into v
+  from questions q
+  where q.exam_set_id = p_exam_set_id;
+  return v;
+end;
+$$;
+grant execute on function get_set_quiz(uuid) to anon, authenticated;
+
 -- ผู้ใช้ส่งคำตอบ -> ระบบตรวจให้คะแนน (เฉลยไม่หลุดออกไปฝั่ง client)
 -- p_duration = เวลาที่ใช้ทำทั้งชุด (วินาที)
 drop function if exists submit_attempt(uuid, uuid, jsonb);
@@ -301,32 +410,27 @@ create function submit_attempt(
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_attempt_id uuid;
-  v_total int;
-  v_score int := 0;
-  rec jsonb;
-  v_correct text;
-  v_ok boolean;
+  v_attempt_id uuid; v_total int; v_score int := 0; rec jsonb; v_sel text; v_g jsonb;
 begin
   if exists (select 1 from profiles where id = p_user_id and suspended) then
     raise exception 'suspended: บัญชีนี้ถูกระงับการใช้งาน';
   end if;
 
-  select count(*) into v_total from questions where exam_set_id = p_exam_set_id;
+  select coalesce(sum(question_points(q_type, choices)), 0) into v_total
+    from questions where exam_set_id = p_exam_set_id;
 
   insert into attempts(user_id, exam_set_id, score, total, completed, duration_seconds)
   values (p_user_id, p_exam_set_id, 0, v_total, true, greatest(0, coalesce(p_duration, 0)))
   returning id into v_attempt_id;
 
   for rec in select * from jsonb_array_elements(p_answers) loop
-    select correct_choice into v_correct
-      from question_keys where question_id = (rec->>'question_id')::uuid;
-    v_ok := (v_correct is not null and v_correct = (rec->>'selected_choice'));
-    if v_ok then v_score := v_score + 1; end if;
+    v_sel := rec->>'selected_choice';
+    v_g := grade_answer((rec->>'question_id')::uuid, v_sel);
+    v_score := v_score + (v_g->>'gained')::int;
 
     insert into answers(attempt_id, question_id, user_id, selected_choice, reason, is_correct)
     values (v_attempt_id, (rec->>'question_id')::uuid, p_user_id,
-            rec->>'selected_choice', rec->>'reason', v_ok);
+            v_sel, rec->>'reason', (v_g->>'is_correct')::boolean);
   end loop;
 
   update attempts set score = v_score where id = v_attempt_id;
@@ -356,6 +460,7 @@ begin
       'question_text', q.question_text,
       'image_url', q.image_url,
       'category', q.category,
+      'q_type', coalesce(q.q_type, 'mc'),
       'choices', q.choices,
       'correct_choice', k.correct_choice,
       'explanation', k.explanation,
@@ -559,7 +664,8 @@ begin
   )
   select coalesce(jsonb_agg(jsonb_build_object(
       'question_id', q.id, 'question_text', q.question_text, 'image_url', q.image_url,
-      'category', q.category, 'choices', q.choices, 'correct_choice', k.correct_choice,
+      'category', q.category, 'q_type', coalesce(q.q_type, 'mc'), 'choices', q.choices,
+      'correct_choice', k.correct_choice,
       'explanation', k.explanation, 'explanation_images', coalesce(k.explanation_images, '[]'::jsonb)
     ) order by random()), '[]'::jsonb)
   into v_items
@@ -596,13 +702,13 @@ declare v_items jsonb;
 begin
   select coalesce(jsonb_agg(jsonb_build_object(
       'question_id', q_id, 'question_text', question_text, 'image_url', image_url,
-      'category', category, 'choices', choices, 'correct_choice', correct_choice,
+      'category', category, 'q_type', q_type, 'choices', choices, 'correct_choice', correct_choice,
       'explanation', explanation, 'explanation_images', explanation_images
     )), '[]'::jsonb)
   into v_items
   from (
-    select q.id as q_id, q.question_text, q.image_url, q.category, q.choices,
-           k.correct_choice, k.explanation,
+    select q.id as q_id, q.question_text, q.image_url, q.category, coalesce(q.q_type, 'mc') as q_type,
+           q.choices, k.correct_choice, k.explanation,
            coalesce(k.explanation_images, '[]'::jsonb) as explanation_images
     from questions q
     join question_keys k on k.question_id = q.id
@@ -649,7 +755,8 @@ declare v jsonb;
 begin
   select coalesce(jsonb_agg(jsonb_build_object(
       'id', q.id, 'question_text', q.question_text, 'image_url', q.image_url,
-      'category', q.category, 'choices', q.choices
+      'category', q.category, 'q_type', coalesce(q.q_type, 'mc'),
+      'choices', safe_choices(coalesce(q.q_type, 'mc'), q.choices)
     ) order by es.day_number, q.order_index), '[]'::jsonb)
   into v
   from questions q
@@ -665,26 +772,25 @@ create or replace function submit_category_attempt(
   p_user_id uuid, p_category text, p_answers jsonb, p_duration int default 0
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_attempt_id uuid; v_total int; v_score int := 0; rec jsonb; v_correct text; v_ok boolean;
+declare v_attempt_id uuid; v_total int := 0; v_score int := 0; rec jsonb; v_sel text; v_g jsonb;
 begin
   if exists (select 1 from profiles where id = p_user_id and suspended) then
     raise exception 'suspended: บัญชีนี้ถูกระงับการใช้งาน';
   end if;
-  v_total := coalesce(jsonb_array_length(p_answers), 0);
   insert into category_attempts(user_id, category, score, total, duration_seconds)
-  values (p_user_id, p_category, 0, v_total, greatest(0, coalesce(p_duration, 0)))
+  values (p_user_id, p_category, 0, 0, greatest(0, coalesce(p_duration, 0)))
   returning id into v_attempt_id;
 
   for rec in select * from jsonb_array_elements(p_answers) loop
-    select correct_choice into v_correct
-      from question_keys where question_id = (rec->>'question_id')::uuid;
-    v_ok := (v_correct is not null and v_correct = (rec->>'selected_choice'));
-    if v_ok then v_score := v_score + 1; end if;
+    v_sel := rec->>'selected_choice';
+    v_g := grade_answer((rec->>'question_id')::uuid, v_sel);
+    v_score := v_score + (v_g->>'gained')::int;
+    v_total := v_total + (v_g->>'possible')::int;
     insert into category_answers(attempt_id, question_id, user_id, selected_choice, is_correct)
-    values (v_attempt_id, (rec->>'question_id')::uuid, p_user_id, rec->>'selected_choice', v_ok);
+    values (v_attempt_id, (rec->>'question_id')::uuid, p_user_id, v_sel, (v_g->>'is_correct')::boolean);
   end loop;
 
-  update category_attempts set score = v_score where id = v_attempt_id;
+  update category_attempts set score = v_score, total = v_total where id = v_attempt_id;
   return jsonb_build_object('attempt_id', v_attempt_id, 'score', v_score, 'total', v_total);
 end;
 $$;
@@ -703,7 +809,8 @@ begin
 
   select jsonb_agg(jsonb_build_object(
       'question_id', q.id, 'question_text', q.question_text, 'image_url', q.image_url,
-      'category', q.category, 'choices', q.choices, 'correct_choice', k.correct_choice,
+      'category', q.category, 'q_type', coalesce(q.q_type, 'mc'), 'choices', q.choices,
+      'correct_choice', k.correct_choice,
       'explanation', k.explanation, 'explanation_images', coalesce(k.explanation_images, '[]'::jsonb),
       'your_choice', a.selected_choice, 'is_correct', coalesce(a.is_correct, false)
     ) order by a.created_at)
@@ -755,6 +862,7 @@ begin
 
   update questions set
     question_text = p_question->>'question_text',
+    q_type = coalesce(nullif(p_question->>'q_type', ''), 'mc'),
     choices = p_question->'choices',
     image_url = nullif(p_question->>'image_url', ''),
     category = nullif(btrim(p_question->>'category'), '')
@@ -820,6 +928,7 @@ begin
       update questions set
         order_index = idx,
         question_text = rec->>'question_text',
+        q_type = coalesce(nullif(rec->>'q_type', ''), 'mc'),
         choices = rec->'choices',
         image_url = nullif(rec->>'image_url', ''),
         category = nullif(btrim(rec->>'category'), '')
@@ -839,9 +948,9 @@ begin
 
       v_updated := v_updated + 1;
     else
-      insert into questions(exam_set_id, order_index, question_text, choices, image_url, category)
-      values (p_set_id, idx, rec->>'question_text', rec->'choices',
-              nullif(rec->>'image_url', ''), nullif(btrim(rec->>'category'), ''))
+      insert into questions(exam_set_id, order_index, question_text, q_type, choices, image_url, category)
+      values (p_set_id, idx, rec->>'question_text', coalesce(nullif(rec->>'q_type', ''), 'mc'),
+              rec->'choices', nullif(rec->>'image_url', ''), nullif(btrim(rec->>'category'), ''))
       returning id into qid;
 
       insert into question_keys(question_id, correct_choice, explanation, explanation_images)

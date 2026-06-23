@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Spinner, Badge, Empty, formatDuration } from '../components/ui'
+import { ReviewAnswer } from '../components/AnswerInput'
 
 export default function CategoryReview() {
   const { attemptId } = useParams()
@@ -126,29 +127,7 @@ export default function CategoryReview() {
                 />
               )}
 
-              <div className="space-y-1.5">
-                {(it.choices || []).map((c) => {
-                  const isCorrect = c.key === it.correct_choice
-                  const isYours = c.key === it.your_choice
-                  return (
-                    <div
-                      key={c.key}
-                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-                        isCorrect
-                          ? 'border-emerald-300 bg-emerald-50 font-semibold text-emerald-700'
-                          : isYours
-                            ? 'border-rose-300 bg-rose-50 text-rose-600'
-                            : 'border-slate-100 text-slate-500'
-                      }`}
-                    >
-                      <span className="font-bold">{c.key}</span>
-                      <span className="flex-1 whitespace-pre-wrap break-words">{c.text}</span>
-                      {isCorrect && <span>✅</span>}
-                      {isYours && !isCorrect && <span className="text-xs">← คุณเลือก</span>}
-                    </div>
-                  )
-                })}
-              </div>
+              <ReviewAnswer it={it} />
 
               {(it.explanation || (it.explanation_images || []).length > 0) && (
                 <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm">

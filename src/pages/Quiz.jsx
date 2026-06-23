@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Spinner, Button, Empty, Badge, AutoTextarea, formatDuration } from '../components/ui'
+import { AnswerInput } from '../components/AnswerInput'
+import { encodeAnswer, hasAnswer } from '../lib/questions'
 
 export default function Quiz() {
   const { setId } = useParams()
@@ -25,11 +27,7 @@ export default function Quiz() {
     ;(async () => {
       setLoading(true)
       const [{ data: qs }, { data: setting }] = await Promise.all([
-        supabase
-          .from('questions')
-          .select('id, order_index, question_text, image_url, category, choices')
-          .eq('exam_set_id', setId)
-          .order('order_index', { ascending: true }),
+        supabase.rpc('get_set_quiz', { p_exam_set_id: setId }),
         supabase.from('app_settings').select('value').eq('key', 'quiz_minutes').maybeSingle(),
       ])
       const mins = Math.max(1, Number(setting?.value) || 15)
@@ -66,7 +64,7 @@ export default function Quiz() {
     try {
       const payload = questions.map((qq) => ({
         question_id: qq.id,
-        selected_choice: responses[qq.id]?.selected || null,
+        selected_choice: encodeAnswer(qq.q_type, responses[qq.id]?.selected),
         reason: responses[qq.id]?.reason?.trim() || null,
       }))
       const duration = startRef.current
@@ -98,7 +96,7 @@ export default function Quiz() {
 
   const q = questions[idx]
   const resp = responses[q.id] || { selected: '', reason: '' }
-  const answeredCount = Object.values(responses).filter((r) => r.selected).length
+  const answeredCount = questions.filter((qq) => hasAnswer(qq.q_type, responses[qq.id]?.selected)).length
   const isLast = idx === questions.length - 1
 
   const setResp = (patch) =>
@@ -174,33 +172,7 @@ export default function Quiz() {
           />
         )}
 
-        <div className="space-y-2.5">
-          {(q.choices || []).map((c) => {
-            const active = resp.selected === c.key
-            return (
-              <button
-                key={c.key}
-                onClick={() => setResp({ selected: c.key })}
-                className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${
-                  active
-                    ? 'border-violet-400 bg-violet-50 shadow-md shadow-violet-200/50'
-                    : 'border-violet-100 bg-white active:bg-violet-50'
-                }`}
-              >
-                <span
-                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-extrabold transition ${
-                    active
-                      ? 'bg-gradient-to-br from-violet-500 to-indigo-500 text-white'
-                      : 'bg-violet-100 text-violet-500'
-                  }`}
-                >
-                  {c.key}
-                </span>
-                <span className="whitespace-pre-wrap break-words text-sm text-slate-700">{c.text}</span>
-              </button>
-            )
-          })}
-        </div>
+        <AnswerInput q={q} value={resp.selected} onChange={(v) => setResp({ selected: v })} />
 
         {/* ช่องเหตุผล */}
         <label className="mt-5 block text-sm font-bold text-slate-600">

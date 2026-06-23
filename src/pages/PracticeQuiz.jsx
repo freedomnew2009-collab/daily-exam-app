@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Spinner, Button, Badge, Empty } from '../components/ui'
+import { AnswerInput, ReviewAnswer } from '../components/AnswerInput'
+import { gradeClient, hasAnswer, encodeAnswer, matchCorrect } from '../lib/questions'
 
 export default function PracticeQuiz({ mode }) {
   const { user } = useStore()
@@ -13,10 +15,21 @@ export default function PracticeQuiz({ mode }) {
   const [loading, setLoading] = useState(true)
   const [questions, setQuestions] = useState([])
   const [idx, setIdx] = useState(0)
-  const [selected, setSelected] = useState(null)
+  const [value, setValue] = useState(null) // คำตอบของข้อปัจจุบัน (string | map)
   const [revealed, setRevealed] = useState(false)
-  const [score, setScore] = useState(0)
+  const [score, setScore] = useState(0) // คะแนนที่ได้ (รวมรายคู่)
   const [done, setDone] = useState(false)
+
+  // คะแนนเต็มรวม (จับคู่นับเป็นรายคู่)
+  const totalPoints = useMemo(
+    () =>
+      questions.reduce(
+        (sum, q) =>
+          sum + (q.q_type === 'match' ? Math.max(1, Object.keys(matchCorrect(q.choices) || {}).length) : 1),
+        0
+      ),
+    [questions]
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -34,7 +47,7 @@ export default function PracticeQuiz({ mode }) {
 
   const restart = () => {
     setIdx(0)
-    setSelected(null)
+    setValue(null)
     setRevealed(false)
     setScore(0)
     setDone(false)
@@ -61,7 +74,7 @@ export default function PracticeQuiz({ mode }) {
   }
 
   if (done) {
-    const p = Math.round((score / questions.length) * 100)
+    const p = Math.round((score / Math.max(1, totalPoints)) * 100)
     return (
       <div className="mx-auto flex min-h-[80vh] max-w-md flex-col items-center justify-center px-6 text-center">
         <div className="animate-float mb-3 text-6xl">{p >= 80 ? '🏆' : p >= 50 ? '💪' : '📚'}</div>
@@ -69,7 +82,7 @@ export default function PracticeQuiz({ mode }) {
         <p className="mt-2 text-slate-500">{title}</p>
         <div className="my-4 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-500 px-8 py-5 text-white shadow-lg shadow-emerald-300/50">
           <p className="text-4xl font-extrabold">
-            {score}/{questions.length}
+            {score}/{totalPoints}
           </p>
           <p className="text-sm text-white/80">ตอบถูก {p}%</p>
         </div>
@@ -86,11 +99,11 @@ export default function PracticeQuiz({ mode }) {
   }
 
   const q = questions[idx]
-  const choose = (key) => {
-    if (revealed) return
-    setSelected(key)
+  const answered = hasAnswer(q.q_type, value)
+  const check = () => {
+    if (revealed || !answered) return
+    setScore((s) => s + gradeClient(q, value).gained)
     setRevealed(true)
-    if (key === q.correct_choice) setScore((s) => s + 1)
   }
   const next = () => {
     if (idx + 1 >= questions.length) {
@@ -98,10 +111,18 @@ export default function PracticeQuiz({ mode }) {
       return
     }
     setIdx((i) => i + 1)
-    setSelected(null)
+    setValue(null)
     setRevealed(false)
   }
 
+  // ข้อมูลสำหรับแสดงเฉลยตอน revealed (ใช้ ReviewAnswer ร่วมกับหน้ารีวิว)
+  const reviewItem = {
+    q_type: q.q_type,
+    choices: q.choices,
+    correct_choice: q.correct_choice,
+    your_choice: encodeAnswer(q.q_type, value),
+    is_correct: gradeClient(q, value).isCorrect,
+  }
   const explImgs = Array.isArray(q.explanation_images) ? q.explanation_images : []
 
   return (
@@ -146,41 +167,11 @@ export default function PracticeQuiz({ mode }) {
           />
         )}
 
-        <div className="space-y-2.5">
-          {(q.choices || []).map((c) => {
-            const isCorrect = c.key === q.correct_choice
-            const isPicked = c.key === selected
-            let cls = 'border-violet-100 bg-white active:bg-violet-50'
-            if (revealed) {
-              if (isCorrect) cls = 'border-emerald-300 bg-emerald-50'
-              else if (isPicked) cls = 'border-rose-300 bg-rose-50'
-              else cls = 'border-slate-100 bg-white opacity-70'
-            }
-            return (
-              <button
-                key={c.key}
-                onClick={() => choose(c.key)}
-                disabled={revealed}
-                className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${cls}`}
-              >
-                <span
-                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${
-                    revealed && isCorrect
-                      ? 'bg-emerald-500 text-white'
-                      : revealed && isPicked
-                        ? 'bg-rose-500 text-white'
-                        : 'bg-violet-100 text-violet-500'
-                  }`}
-                >
-                  {c.key}
-                </span>
-                <span className="whitespace-pre-wrap break-words text-sm text-slate-700">{c.text}</span>
-                {revealed && isCorrect && <span className="ml-auto text-emerald-600">✓</span>}
-                {revealed && isPicked && !isCorrect && <span className="ml-auto text-rose-500">✗</span>}
-              </button>
-            )
-          })}
-        </div>
+        {revealed ? (
+          <ReviewAnswer it={reviewItem} />
+        ) : (
+          <AnswerInput q={q} value={value} onChange={setValue} />
+        )}
 
         {/* เฉลย */}
         {revealed && (q.explanation || explImgs.length > 0) && (
@@ -207,15 +198,17 @@ export default function PracticeQuiz({ mode }) {
         )}
       </div>
 
-      {/* ปุ่มถัดไป */}
+      {/* ปุ่มตรวจ / ถัดไป */}
       <div className="sticky bottom-0 -mx-4 mt-3 border-t border-slate-100 bg-white/90 px-4 py-3 backdrop-blur">
-        <Button className="w-full" disabled={!revealed} onClick={next}>
-          {!revealed
-            ? 'เลือกคำตอบก่อน'
-            : idx + 1 >= questions.length
-              ? '🎉 ดูผลฝึกซ้อม'
-              : 'ถัดไป →'}
-        </Button>
+        {revealed ? (
+          <Button className="w-full" onClick={next}>
+            {idx + 1 >= questions.length ? '🎉 ดูผลฝึกซ้อม' : 'ถัดไป →'}
+          </Button>
+        ) : (
+          <Button className="w-full" disabled={!answered} onClick={check}>
+            {answered ? '✅ ตรวจคำตอบ' : 'ตอบคำถามก่อน'}
+          </Button>
+        )}
       </div>
     </div>
   )

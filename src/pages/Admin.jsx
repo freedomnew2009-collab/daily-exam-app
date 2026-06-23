@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { compressImage } from '../lib/image'
 import { Button, Card, Badge, Spinner, AutoTextarea, BigTextField, formatDuration } from '../components/ui'
+import { Q_TYPES, fillAccepts } from '../lib/questions'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
@@ -12,8 +13,15 @@ function blankQuestion() {
     question_text: '',
     image_url: '',
     category: '',
+    q_type: 'mc',
     choices: LETTERS.map((k) => ({ key: k, text: '' })),
     correct_choice: 'A',
+    accepts: [''], // เติมคำ: คำตอบที่ยอมรับได้ (หลายคำได้)
+    pairs: [
+      { left: '', right: '' },
+      { left: '', right: '' },
+      { left: '', right: '' },
+    ], // จับคู่: คู่ซ้าย-ขวา
     explanation: '',
     explanation_images: [],
   }
@@ -84,6 +92,17 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
     const choices = q.choices.map((c, ci) => (ci === i ? { ...c, text } : c))
     setField({ choices })
   }
+  const qType = q.q_type || 'mc'
+  // เติมคำ
+  const accepts = Array.isArray(q.accepts) && q.accepts.length ? q.accepts : ['']
+  const setAccept = (i, text) => setField({ accepts: accepts.map((a, ai) => (ai === i ? text : a)) })
+  const addAccept = () => setField({ accepts: [...accepts, ''] })
+  const removeAccept = (i) => setField({ accepts: accepts.filter((_, ai) => ai !== i) })
+  // จับคู่
+  const pairs = Array.isArray(q.pairs) && q.pairs.length ? q.pairs : [{ left: '', right: '' }]
+  const setPair = (i, patch) => setField({ pairs: pairs.map((p, pi) => (pi === i ? { ...p, ...patch } : p)) })
+  const addPair = () => setField({ pairs: [...pairs, { left: '', right: '' }] })
+  const removePair = (i) => setField({ pairs: pairs.filter((_, pi) => pi !== i) })
 
   const onPickImage = async (e) => {
     const file = e.target.files?.[0]
@@ -160,6 +179,25 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
           ลบข้อนี้
         </button>
       </div>
+
+      {/* ชนิดข้อสอบ */}
+      <div className="flex flex-wrap gap-1.5">
+        {Q_TYPES.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => setField({ q_type: t.value })}
+            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+              qType === t.value
+                ? 'bg-violet-500 text-white shadow-sm'
+                : 'bg-violet-50 text-violet-500 hover:bg-violet-100'
+            }`}
+          >
+            {t.emoji} {t.label}
+          </button>
+        ))}
+      </div>
+
       <AutoTextarea
         value={q.question_text}
         onChange={(e) => setField({ question_text: e.target.value })}
@@ -217,34 +255,122 @@ function QuestionEditor({ q, index, onChange, onRemove, categories = [] }) {
         </label>
       )}
       {imgErr && <p className="text-xs font-medium text-rose-500">{imgErr}</p>}
-      <div className="space-y-2">
-        {q.choices.map((c, i) => (
-          <div key={c.key} className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={() => setField({ correct_choice: c.key })}
-              className={`mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
-                q.correct_choice === c.key
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
-                  : 'bg-violet-100 text-violet-500'
-              }`}
-              title="แตะเพื่อตั้งเป็นคำตอบที่ถูก"
-            >
-              {c.key}
-            </button>
-            <AutoTextarea
-              value={c.text}
-              minRows={1}
-              onChange={(e) => setChoice(i, e.target.value)}
-              placeholder={`ตัวเลือก ${c.key}`}
-              className="flex-1 resize-none rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
-            />
+
+      {/* ===== ปรนัย ===== */}
+      {qType === 'mc' && (
+        <>
+          <div className="space-y-2">
+            {q.choices.map((c, i) => (
+              <div key={c.key} className="flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => setField({ correct_choice: c.key })}
+                  className={`mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
+                    q.correct_choice === c.key
+                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                      : 'bg-violet-100 text-violet-500'
+                  }`}
+                  title="แตะเพื่อตั้งเป็นคำตอบที่ถูก"
+                >
+                  {c.key}
+                </button>
+                <AutoTextarea
+                  value={c.text}
+                  minRows={1}
+                  onChange={(e) => setChoice(i, e.target.value)}
+                  placeholder={`ตัวเลือก ${c.key}`}
+                  className="flex-1 resize-none rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+                />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <p className="text-xs text-slate-500">
-        ✅ คำตอบที่ถูก: <b className="text-emerald-600">{q.correct_choice}</b> (แตะวงกลมตัวอักษรเพื่อเปลี่ยน)
-      </p>
+          <p className="text-xs text-slate-500">
+            ✅ คำตอบที่ถูก: <b className="text-emerald-600">{q.correct_choice}</b> (แตะวงกลมตัวอักษรเพื่อเปลี่ยน)
+          </p>
+        </>
+      )}
+
+      {/* ===== เติมคำ ===== */}
+      {qType === 'fill' && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500">
+            ✏️ คำตอบที่ยอมรับได้ (ใส่ได้หลายแบบ เช่น "2" และ "สอง" — ตรวจแบบไม่สนตัวพิมพ์เล็ก/ช่องว่าง)
+          </p>
+          {accepts.map((a, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-emerald-500">✓</span>
+              <input
+                type="text"
+                value={a}
+                onChange={(e) => setAccept(i, e.target.value)}
+                placeholder={`คำตอบที่ยอมรับ #${i + 1}`}
+                className="min-w-0 flex-1 rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+              />
+              {accepts.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeAccept(i)}
+                  className="flex-shrink-0 rounded-lg bg-rose-50 px-2 py-1 text-xs font-bold text-rose-500"
+                >
+                  ลบ
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addAccept}
+            className="rounded-xl border-2 border-dashed border-violet-200 px-3 py-1.5 text-xs font-bold text-violet-500 hover:bg-violet-50"
+          >
+            ➕ เพิ่มคำตอบที่ยอมรับ
+          </button>
+        </div>
+      )}
+
+      {/* ===== จับคู่ ===== */}
+      {qType === 'match' && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500">
+            🔗 ใส่คู่ที่ถูกต้อง (ซ้าย ↔ ขวา) — เวลาให้ผู้เรียนทำ ระบบจะสลับฝั่งขวาให้อัตโนมัติ · ได้คะแนนเป็นรายคู่
+          </p>
+          {pairs.map((p, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={p.left}
+                onChange={(e) => setPair(i, { left: e.target.value })}
+                placeholder={`ซ้าย #${i + 1}`}
+                className="min-w-0 flex-1 rounded-xl border-2 border-violet-100 bg-white px-2.5 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+              />
+              <span className="flex-shrink-0 text-violet-300">↔</span>
+              <input
+                type="text"
+                value={p.right}
+                onChange={(e) => setPair(i, { right: e.target.value })}
+                placeholder={`ขวา #${i + 1}`}
+                className="min-w-0 flex-1 rounded-xl border-2 border-emerald-100 bg-white px-2.5 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-400"
+              />
+              {pairs.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removePair(i)}
+                  className="flex-shrink-0 rounded-lg bg-rose-50 px-2 py-1 text-xs font-bold text-rose-500"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addPair}
+            className="rounded-xl border-2 border-dashed border-violet-200 px-3 py-1.5 text-xs font-bold text-violet-500 hover:bg-violet-50"
+          >
+            ➕ เพิ่มคู่
+          </button>
+        </div>
+      )}
+
       <BigTextField
         label="คำอธิบาย / เฉลย"
         value={q.explanation}
@@ -1154,7 +1280,7 @@ export default function Admin() {
   const loadSetQuestions = async (setId) => {
     const { data: qs } = await supabase
       .from('questions')
-      .select('id, order_index, question_text, image_url, category, choices')
+      .select('id, order_index, question_text, image_url, category, choices, q_type')
       .eq('exam_set_id', setId)
       .order('order_index', { ascending: true })
     const ids = (qs || []).map((q) => q.id)
@@ -1166,18 +1292,30 @@ export default function Admin() {
         .in('question_id', ids)
       for (const k of ks || []) keys[k.question_id] = k
     }
-    return (qs || []).map((q) => ({
-      id: q.id,
-      question_text: q.question_text || '',
-      image_url: q.image_url || '',
-      category: q.category || '',
-      choices: normalizeChoices(q.choices),
-      correct_choice: keys[q.id]?.correct_choice || 'A',
-      explanation: keys[q.id]?.explanation || '',
-      explanation_images: Array.isArray(keys[q.id]?.explanation_images)
-        ? keys[q.id].explanation_images
-        : [],
-    }))
+    return (qs || []).map((q) => {
+      const type = q.q_type || 'mc'
+      const cc = keys[q.id]?.correct_choice
+      const loadedAccepts = type === 'fill' ? fillAccepts(cc) : []
+      const loadedPairs =
+        type === 'match' && Array.isArray(q.choices)
+          ? q.choices.map((c) => ({ left: c.left || '', right: c.right || '' }))
+          : []
+      return {
+        id: q.id,
+        question_text: q.question_text || '',
+        image_url: q.image_url || '',
+        category: q.category || '',
+        q_type: type,
+        choices: type === 'mc' ? normalizeChoices(q.choices) : LETTERS.map((k) => ({ key: k, text: '' })),
+        correct_choice: type === 'mc' ? cc || 'A' : 'A',
+        accepts: loadedAccepts.length ? loadedAccepts : [''],
+        pairs: loadedPairs.length ? loadedPairs : [{ left: '', right: '' }, { left: '', right: '' }],
+        explanation: keys[q.id]?.explanation || '',
+        explanation_images: Array.isArray(keys[q.id]?.explanation_images)
+          ? keys[q.id].explanation_images
+          : [],
+      }
+    })
   }
 
   // เลือกชุดเดิม -> โหลดคำถาม+เฉลยทั้งหมดกลับมาแก้ไข; เลือก "สร้างใหม่" -> ฟอร์มเปล่า
@@ -1284,20 +1422,59 @@ export default function Admin() {
   const addQ = () => setQuestions((qs) => [...qs, blankQuestion()])
 
   // ข้อที่ยังไม่ได้กรอกอะไรเลย -> ข้ามไป (ไม่ต้องครบ 5 ข้อ)
-  const isBlankQuestion = (q) =>
-    !q.question_text.trim() && !q.explanation.trim() && !q.choices.some((c) => c.text.trim())
+  const isBlankQuestion = (q) => {
+    if (q.question_text.trim() || q.explanation.trim()) return false
+    const type = q.q_type || 'mc'
+    if (type === 'fill') return !(q.accepts || []).some((a) => a.trim())
+    if (type === 'match') return !(q.pairs || []).some((p) => p.left.trim() || p.right.trim())
+    return !q.choices.some((c) => c.text.trim())
+  }
 
   const validate = (list) => {
     if (list.length === 0) return 'กรอกอย่างน้อย 1 ข้อก่อนบันทึก'
     for (let i = 0; i < list.length; i++) {
       const q = list[i]
       if (!q.question_text.trim()) return `ข้อ ${i + 1}: ยังไม่ได้ใส่โจทย์`
-      const filled = q.choices.filter((c) => c.text.trim()).length
-      if (filled < 2) return `ข้อ ${i + 1}: ต้องมีตัวเลือกอย่างน้อย 2 ข้อ`
-      if (!q.choices.find((c) => c.key === q.correct_choice)?.text.trim())
-        return `ข้อ ${i + 1}: ตัวเลือกที่ตั้งเป็นคำตอบถูกยังว่าง`
+      const type = q.q_type || 'mc'
+      if (type === 'fill') {
+        if (!(q.accepts || []).some((a) => a.trim()))
+          return `ข้อ ${i + 1}: เติมคำ — ต้องมีคำตอบที่ยอมรับอย่างน้อย 1 คำ`
+      } else if (type === 'match') {
+        const ps = (q.pairs || []).filter((p) => p.left.trim() && p.right.trim())
+        if (ps.length < 2) return `ข้อ ${i + 1}: จับคู่ — ต้องมีคู่ที่กรอกครบ (ซ้าย+ขวา) อย่างน้อย 2 คู่`
+      } else {
+        const filled = q.choices.filter((c) => c.text.trim()).length
+        if (filled < 2) return `ข้อ ${i + 1}: ต้องมีตัวเลือกอย่างน้อย 2 ข้อ`
+        if (!q.choices.find((c) => c.key === q.correct_choice)?.text.trim())
+          return `ข้อ ${i + 1}: ตัวเลือกที่ตั้งเป็นคำตอบถูกยังว่าง`
+      }
     }
     return null
+  }
+
+  // แปลง state ของฟอร์มเป็น payload ตามชนิดข้อ
+  const buildQuestionPayload = (q) => {
+    const type = q.q_type || 'mc'
+    const base = {
+      id: q.id || null,
+      question_text: q.question_text.trim(),
+      image_url: q.image_url || '',
+      category: (q.category || '').trim(),
+      q_type: type,
+      explanation: q.explanation.trim(),
+      explanation_images: Array.isArray(q.explanation_images) ? q.explanation_images : [],
+    }
+    if (type === 'fill') {
+      const accepts = (q.accepts || []).map((a) => a.trim()).filter(Boolean)
+      return { ...base, choices: [], correct_choice: JSON.stringify(accepts) }
+    }
+    if (type === 'match') {
+      const pairs = (q.pairs || [])
+        .filter((p) => p.left.trim() && p.right.trim())
+        .map((p, i) => ({ key: String(i + 1), left: p.left.trim(), right: p.right.trim() }))
+      return { ...base, choices: pairs, correct_choice: 'match' }
+    }
+    return { ...base, choices: q.choices.filter((c) => c.text.trim()), correct_choice: q.correct_choice }
   }
 
   const save = async () => {
@@ -1312,16 +1489,7 @@ export default function Admin() {
     setSaving(true)
     try {
       // ส่ง id ติดไปกับแต่ละข้อ เพื่อให้ฝั่ง DB แยก "แก้ของเดิม" (มี id) กับ "เพิ่มใหม่" (ไม่มี id)
-      const payload = filledQuestions.map((q) => ({
-        id: q.id || null,
-        question_text: q.question_text.trim(),
-        image_url: q.image_url || '',
-        category: (q.category || '').trim(),
-        choices: q.choices.filter((c) => c.text.trim()),
-        correct_choice: q.correct_choice,
-        explanation: q.explanation.trim(),
-        explanation_images: Array.isArray(q.explanation_images) ? q.explanation_images : [],
-      }))
+      const payload = filledQuestions.map(buildQuestionPayload)
 
       if (isNewSet) {
         const { error } = await supabase.rpc('create_exam_set', {

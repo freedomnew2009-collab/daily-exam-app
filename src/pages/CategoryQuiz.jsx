@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Spinner, Button, Empty, formatDuration } from '../components/ui'
+import { AnswerInput } from '../components/AnswerInput'
+import { encodeAnswer, hasAnswer } from '../lib/questions'
 
 export default function CategoryQuiz() {
   const { category } = useParams()
@@ -46,7 +48,7 @@ export default function CategoryQuiz() {
     try {
       const payload = questions.map((qq) => ({
         question_id: qq.id,
-        selected_choice: responses[qq.id] || null,
+        selected_choice: encodeAnswer(qq.q_type, responses[qq.id]),
       }))
       const duration = startRef.current
         ? Math.floor((Date.now() - startRef.current) / 1000)
@@ -81,10 +83,10 @@ export default function CategoryQuiz() {
     )
 
   const q = questions[idx]
-  const selected = responses[q.id] || ''
-  const answeredCount = Object.values(responses).filter(Boolean).length
+  const selected = responses[q.id]
+  const answeredCount = questions.filter((qq) => hasAnswer(qq.q_type, responses[qq.id])).length
   const isLast = idx === questions.length - 1
-  const setResp = (key) => setResponses((prev) => ({ ...prev, [q.id]: key }))
+  const setResp = (val) => setResponses((prev) => ({ ...prev, [q.id]: val }))
 
   return (
     <div className="flex min-h-[calc(100vh-60px)] flex-col px-4 pt-3">
@@ -133,33 +135,7 @@ export default function CategoryQuiz() {
           />
         )}
 
-        <div className="space-y-2.5">
-          {(q.choices || []).map((c) => {
-            const active = selected === c.key
-            return (
-              <button
-                key={c.key}
-                onClick={() => setResp(c.key)}
-                className={`flex w-full items-center gap-3 rounded-2xl border-2 p-3 text-left transition ${
-                  active
-                    ? 'border-violet-400 bg-violet-50 shadow-md shadow-violet-200/50'
-                    : 'border-violet-100 bg-white active:bg-violet-50'
-                }`}
-              >
-                <span
-                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-extrabold transition ${
-                    active
-                      ? 'bg-gradient-to-br from-violet-500 to-indigo-500 text-white'
-                      : 'bg-violet-100 text-violet-500'
-                  }`}
-                >
-                  {c.key}
-                </span>
-                <span className="whitespace-pre-wrap break-words text-sm text-slate-700">{c.text}</span>
-              </button>
-            )
-          })}
-        </div>
+        <AnswerInput q={q} value={selected} onChange={setResp} />
       </div>
 
       {err && <p className="mt-2 text-sm font-medium text-rose-500">{err}</p>}
