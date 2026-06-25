@@ -87,7 +87,9 @@ export default function Review() {
           {score}
           <span className="text-2xl text-white/70">/{total}</span>
         </p>
-        <p className="mt-1 text-sm font-semibold text-white/90">{scoreMsg || cheer.text}</p>
+        <p className="mt-2 text-xl font-extrabold leading-snug text-white">
+          {cheer.emoji} {scoreMsg || cheer.text} {cheer.emoji}
+        </p>
         {duration_seconds > 0 && (
           <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-sm font-bold tabular-nums">
             ⏱ ใช้เวลา {formatDuration(duration_seconds)} นาที
@@ -101,7 +103,7 @@ export default function Review() {
         <div className="mt-4 flex justify-center gap-2">
           <button
             onClick={() => navigate(`/quiz/${setId}`)}
-            className="rounded-2xl bg-white/20 px-5 py-2.5 font-bold text-white hover:bg-white/30"
+            className="rounded-xl bg-white/20 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-white/30"
           >
             🔁 ทำใหม่อีกครั้ง
           </button>
