@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Spinner, Button, Badge, Empty } from '../components/ui'
 import { AnswerInput, ReviewAnswer } from '../components/AnswerInput'
 import { gradeClient, hasAnswer, encodeAnswer, matchCorrect } from '../lib/questions'
+import { playFinishSound } from '../lib/sound'
 
 export default function PracticeQuiz({ mode }) {
   const { user } = useStore()
@@ -45,7 +46,17 @@ export default function PracticeQuiz({ mode }) {
     load()
   }, [load])
 
+  // เล่นเสียงตอนจบรอบฝึกซ้อม
+  const soundRef = useRef(false)
+  useEffect(() => {
+    if (done && !soundRef.current) {
+      soundRef.current = true
+      playFinishSound(totalPoints ? score / totalPoints : 0)
+    }
+  }, [done, score, totalPoints])
+
   const restart = () => {
+    soundRef.current = false
     setIdx(0)
     setValue(null)
     setRevealed(false)

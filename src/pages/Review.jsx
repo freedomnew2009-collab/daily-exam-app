@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Spinner, Badge, Empty, formatDuration } from '../components/ui'
 import { ReviewAnswer } from '../components/AnswerInput'
+import { playFinishSound } from '../lib/sound'
 
 export default function Review() {
   const { setId } = useParams()
   const { user } = useStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const soundRef = useRef(false)
 
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState(null)
@@ -39,6 +42,14 @@ export default function Review() {
       setLoading(false)
     })()
   }, [setId, user.id])
+
+  // เล่นเสียงเฉลิมฉลองเฉพาะตอนเพิ่งทำเสร็จ (ไม่เล่นซ้ำเวลาเปิดดูเฉลยย้อนหลัง)
+  useEffect(() => {
+    if (!soundRef.current && location.state?.justFinished && data?.total != null) {
+      soundRef.current = true
+      playFinishSound(data.total ? data.score / data.total : 0)
+    }
+  }, [data, location.state])
 
   if (loading) return <Spinner />
   if (err)
