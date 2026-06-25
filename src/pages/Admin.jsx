@@ -1722,6 +1722,13 @@ export default function Admin() {
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">
+                <Link
+                  to={`/admin/preview/${s.id}`}
+                  className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-200"
+                  title="ลองทำข้อสอบชุดนี้แบบนักเรียน (ไม่บันทึกคะแนน)"
+                >
+                  👁️ ทดสอบ
+                </Link>
                 <button
                   onClick={() => pickTarget(s.id)}
                   className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
