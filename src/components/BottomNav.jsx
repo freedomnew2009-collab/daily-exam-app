@@ -5,6 +5,7 @@ const tabs = [
   { to: '/', label: 'ข้อสอบ', icon: '📝', end: true },
   { to: '/library', label: 'คลัง', icon: '📚' },
   { to: '/practice', label: 'ฝึกซ้อม', icon: '🎯' },
+  { to: '/garden', label: 'สวน', icon: '🌳' },
   { to: '/articles', label: 'บทความ', icon: '📰', articleTab: true },
   { to: '/qa', label: 'ถาม-ตอบ', icon: '💬' },
   { to: '/admin', label: 'แอดมิน', icon: '🛠️', adminTab: true },

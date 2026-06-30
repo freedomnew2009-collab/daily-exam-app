@@ -436,6 +436,7 @@ begin
   end loop;
 
   update attempts set score = v_score where id = v_attempt_id;
+  perform add_drops(p_user_id, v_score); -- รางวัลเกม: ตอบถูก 1 ข้อ = 1 หยดน้ำ
   return jsonb_build_object('attempt_id', v_attempt_id, 'score', v_score, 'total', v_total);
 end;
 $$;
@@ -933,6 +934,7 @@ begin
   end loop;
 
   update category_attempts set score = v_score, total = v_total where id = v_attempt_id;
+  perform add_drops(p_user_id, v_score); -- รางวัลเกม: ตอบถูก 1 ข้อ = 1 หยดน้ำ
   return jsonb_build_object('attempt_id', v_attempt_id, 'score', v_score, 'total', v_total);
 end;
 $$;
@@ -1200,6 +1202,61 @@ begin
 end;
 $$;
 grant execute on function get_article_stats() to anon, authenticated;
+
+-- ===== 🌳 เกมปลูกต้นไม้: ตอบถูก 1 ข้อ = 1 หยดน้ำ · รด 5 หยด = อัป 1 เลเวล =====
+create table if not exists garden (
+  user_id uuid primary key references profiles(id) on delete cascade,
+  drops int not null default 0,   -- หยดน้ำที่มีไว้ใช้รด (ยังไม่ได้รด)
+  growth int not null default 0,  -- จำนวนหยดที่รดไปแล้วสะสม (level = growth/5 + 1)
+  updated_at timestamptz not null default now()
+);
+alter table garden enable row level security;
+
+-- ให้หยดน้ำ (เรียกตอน submit ข้อสอบ)
+create or replace function add_drops(p_user_id uuid, p_n int)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(p_n, 0) <= 0 then return; end if;
+  insert into garden(user_id, drops) values (p_user_id, p_n)
+  on conflict (user_id) do update set drops = garden.drops + p_n, updated_at = now();
+end;
+$$;
+grant execute on function add_drops(uuid, int) to anon, authenticated;
+
+-- อ่านสถานะสวน
+create or replace function get_garden(p_user_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_drops int := 0; v_growth int := 0;
+begin
+  select drops, growth into v_drops, v_growth from garden where user_id = p_user_id;
+  v_drops := coalesce(v_drops, 0); v_growth := coalesce(v_growth, 0);
+  return jsonb_build_object('drops', v_drops, 'growth', v_growth,
+    'level', v_growth / 5 + 1, 'in_level', v_growth % 5, 'per_level', 5);
+end;
+$$;
+grant execute on function get_garden(uuid) to anon, authenticated;
+
+-- รดน้ำ p_count หยด (ใช้ได้ไม่เกินที่มี) -> โตขึ้น + อัปเลเวล
+create or replace function water_tree(p_user_id uuid, p_count int default 1)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_drops int; v_growth int; v_use int; v_old_level int; v_new_level int;
+begin
+  insert into garden(user_id) values (p_user_id) on conflict (user_id) do nothing;
+  select drops, growth into v_drops, v_growth from garden where user_id = p_user_id for update;
+  v_use := least(greatest(coalesce(p_count, 1), 0), v_drops);
+  v_old_level := v_growth / 5 + 1;
+  update garden set drops = drops - v_use, growth = growth + v_use, updated_at = now()
+    where user_id = p_user_id
+    returning drops, growth into v_drops, v_growth;
+  v_new_level := v_growth / 5 + 1;
+  return jsonb_build_object('drops', v_drops, 'growth', v_growth, 'level', v_new_level,
+    'in_level', v_growth % 5, 'per_level', 5, 'used', v_use, 'leveled_up', v_new_level - v_old_level);
+end;
+$$;
+grant execute on function water_tree(uuid, int) to anon, authenticated;
 
 -- ---------- ที่เก็บรูปคำถาม (Supabase Storage) ----------
 insert into storage.buckets (id, name, public)

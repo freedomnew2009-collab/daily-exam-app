@@ -25,6 +25,7 @@ export default function Home({ onSeen }) {
   const [attempts, setAttempts] = useState({}) // setId -> { count, best }
   const [lastSeenAtLoad] = useState(getLastSeen())
   const [newArticles, setNewArticles] = useState(0) // จำนวนบทความใหม่ที่ยังไม่ได้อ่าน
+  const [garden, setGarden] = useState(null) // { drops, level }
 
   const load = useCallback(async () => {
     if (!isConfigured) {
@@ -33,24 +34,27 @@ export default function Home({ onSeen }) {
     }
     setLoading(true)
     const lastSeenArticles = getLastSeenArticles()
-    const [{ data: setsData }, { data: attemptData }, { count: newArticleCount }] = await Promise.all([
-      supabase
-        .from('exam_sets')
-        .select('id, day_number, title, created_at, question_count')
-        .eq('published', true)
-        .order('day_number', { ascending: true }),
-      supabase
-        .from('attempts')
-        .select('exam_set_id, score, total, completed')
-        .eq('user_id', user.id)
-        .eq('completed', true),
-      supabase
-        .from('articles')
-        .select('id', { count: 'exact', head: true })
-        .eq('published', true)
-        .gt('created_at', lastSeenArticles),
-    ])
+    const [{ data: setsData }, { data: attemptData }, { count: newArticleCount }, { data: gardenData }] =
+      await Promise.all([
+        supabase
+          .from('exam_sets')
+          .select('id, day_number, title, created_at, question_count')
+          .eq('published', true)
+          .order('day_number', { ascending: true }),
+        supabase
+          .from('attempts')
+          .select('exam_set_id, score, total, completed')
+          .eq('user_id', user.id)
+          .eq('completed', true),
+        supabase
+          .from('articles')
+          .select('id', { count: 'exact', head: true })
+          .eq('published', true)
+          .gt('created_at', lastSeenArticles),
+        supabase.rpc('get_garden', { p_user_id: user.id }),
+      ])
     setNewArticles(newArticleCount || 0)
+    setGarden(gardenData || null)
 
     const map = {}
     for (const a of attemptData || []) {
@@ -92,6 +96,23 @@ export default function Home({ onSeen }) {
           ↩ ออก
         </button>
       </header>
+
+      {/* สวนต้นไม้ */}
+      <button
+        onClick={() => navigate('/garden')}
+        className="animate-rise mb-4 flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 p-3 text-left text-white shadow-lg shadow-emerald-300/40 active:scale-[0.99]"
+      >
+        <span className="text-3xl">🌳</span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">สวนต้นไม้ของฉัน · เลเวล {garden?.level ?? 1}</span>
+          <span className="block text-xs text-white/85">
+            {garden?.drops > 0
+              ? `💧 มี ${garden.drops} หยดน้ำรอรดต้นไม้ — แตะเลย!`
+              : 'ทำข้อสอบถูกเพื่อเก็บหยดน้ำมาปลูกต้นไม้ 🌱'}
+          </span>
+        </span>
+        <span className="flex-shrink-0 text-white/70">›</span>
+      </button>
 
       {/* แจ้งเตือนบทความใหม่ */}
       {newArticles > 0 && (

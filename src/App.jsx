@@ -20,6 +20,7 @@ import PracticeQuiz from './pages/PracticeQuiz'
 import CategoryQuiz from './pages/CategoryQuiz'
 import CategoryReview from './pages/CategoryReview'
 import PreviewQuiz from './pages/PreviewQuiz'
+import Garden from './pages/Garden'
 import QA from './pages/QA'
 import Admin from './pages/Admin'
 import Articles, { ArticleView } from './pages/Articles'
@@ -166,6 +167,7 @@ export default function App() {
           <Route path="/articles/:id" element={<ArticleView />} />
           <Route path="/quiz/:setId" element={<Quiz />} />
           <Route path="/review/:setId" element={<Review />} />
+          <Route path="/garden" element={<Garden />} />
           <Route path="/practice" element={<Practice />} />
           <Route path="/practice/wrong" element={<PracticeQuiz mode="wrong" />} />
           <Route path="/practice/category/:category" element={<PracticeQuiz mode="category" />} />

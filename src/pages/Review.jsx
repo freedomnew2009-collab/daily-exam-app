@@ -121,6 +121,19 @@ export default function Review() {
         </div>
       </div>
 
+      {location.state?.justFinished?.score > 0 && (
+        <button
+          onClick={() => navigate('/garden')}
+          className="animate-rise mb-4 flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 p-3 text-left text-white shadow-lg shadow-emerald-300/40"
+        >
+          <span className="text-2xl">💧</span>
+          <span className="min-w-0 flex-1 text-sm font-bold">
+            ได้รับ {location.state.justFinished.score} หยดน้ำ! ไปรดน้ำต้นไม้กันเลย 🌳
+          </span>
+          <span className="flex-shrink-0 text-white/70">›</span>
+        </button>
+      )}
+
       <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
         <span className="text-xl">📖</span> เฉลยและคำอธิบาย
       </h2>
