@@ -80,7 +80,7 @@ begin
       'answered', coalesce(st.answered, 0), 'wrong', coalesce(st.wrong, 0),
       'wrong_pct', case when coalesce(st.answered, 0) > 0
                         then round(100.0 * st.wrong / st.answered)::int else 0 end
-    ) order by case when coalesce(st.answered, 0) > 0 then 1.0 * st.wrong / st.answered else -1 end desc, q.order_index)
+    ) order by case when coalesce(st.answered, 0) > 0 then 1.0 * st.wrong / st.answered else -1 end desc, q.order_index), '[]'::jsonb)
   into v_items
   from questions q
   left join (
