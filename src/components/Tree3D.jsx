@@ -1,7 +1,8 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Suspense, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
+import * as THREE from 'three'
 
-// สุ่มแบบมี seed (ฟอร์มเดิมทุกครั้งสำหรับเลเวลเดียวกัน ไม่กระพริบตอน re-render)
+// สุ่มแบบมี seed (ฟอร์มเดิมทุกครั้งสำหรับเลเวลเดียวกัน)
 function mulberry32(seed) {
   let a = seed >>> 0
   return () => {
@@ -13,100 +14,163 @@ function mulberry32(seed) {
   }
 }
 
-const GREENS = ['#4caf50', '#43a047', '#66bb6a', '#388e3c', '#5cc85f', '#2e9e4f']
+// ช่วงพัฒนาการ (สีใบ + ของประดับ ต่างกันชัดในแต่ละช่วง)
+function stageOf(lv) {
+  if (lv <= 2) return { leaves: ['#86d96f', '#9be082', '#76c95f'], deco: null, decoN: 0 }
+  if (lv <= 4) return { leaves: ['#62c95c', '#73d166', '#52b84f'], deco: null, decoN: 0 }
+  if (lv <= 6) return { leaves: ['#4caf50', '#5cc25a', '#43a047'], deco: '#fff3b0', decoN: 5 } // ตูมเหลืองอ่อน
+  if (lv <= 9) return { leaves: ['#46a64d', '#4caf50', '#66bb6a'], deco: '#ff86bd', decoN: 12 } // ดอกชมพู
+  if (lv <= 12) return { leaves: ['#3f9e4f', '#43a047', '#379040'], deco: '#ef4444', decoN: 14 } // ผลแดง
+  if (lv <= 16) return { leaves: ['#2f8b46', '#368f3d', '#43a047'], deco: '#e03131', decoN: 20 } // ผลดก เขียวเข้ม
+  return { leaves: ['#2f9e4f', '#3f9e4f', '#57b85f'], deco: '#ffce3a', decoN: 22, golden: true } // ผลทอง
+}
+
+// รูปใบไม้ (โค้งปลายแหลม) วางจุดหมุนที่โคนใบ
+function makeLeafGeometry() {
+  const s = new THREE.Shape()
+  s.moveTo(0, 0)
+  s.bezierCurveTo(0.3, 0.2, 0.24, 0.72, 0, 1)
+  s.bezierCurveTo(-0.24, 0.72, -0.3, 0.2, 0, 0)
+  const geo = new THREE.ShapeGeometry(s, 8)
+  geo.translate(0, -0.05, 0)
+  return geo
+}
+
+function Leaves({ leaves, geometry }) {
+  const ref = useRef()
+  useEffect(() => {
+    if (!ref.current) return
+    const dummy = new THREE.Object3D()
+    leaves.forEach((lf, i) => {
+      dummy.position.set(lf.p[0], lf.p[1], lf.p[2])
+      dummy.rotation.set(lf.r[0], lf.r[1], lf.r[2])
+      dummy.scale.setScalar(lf.s)
+      dummy.updateMatrix()
+      ref.current.setMatrixAt(i, dummy.matrix)
+      ref.current.setColorAt(i, new THREE.Color(lf.c))
+    })
+    ref.current.instanceMatrix.needsUpdate = true
+    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true
+  }, [leaves])
+  return (
+    <instancedMesh ref={ref} args={[geometry, undefined, leaves.length]} castShadow>
+      <meshStandardMaterial side={THREE.DoubleSide} roughness={0.7} />
+    </instancedMesh>
+  )
+}
 
 function Tree({ level }) {
   const g = useRef()
   useFrame((_, dt) => {
-    if (g.current) g.current.rotation.y += dt * 0.45
+    if (g.current) g.current.rotation.y += dt * 0.4
   })
 
+  const leafGeo = useMemo(() => makeLeafGeometry(), [])
   const L = Math.max(1, level)
-  const cap = Math.min(L, 12)
+  const cap = Math.min(L, 20)
 
   const model = useMemo(() => {
-    const rnd = mulberry32(1000 + cap)
-    const trunkH = 0.55 + Math.min(cap, 10) * 0.16
+    const rnd = mulberry32(2000 + cap)
+    const st = stageOf(cap)
+    const trunkH = 0.5 + Math.min(cap, 18) * 0.12
     const trunkTop = 0.35 + trunkH
-    // ทรงพุ่มใบ (รัศมีแนวนอน/ตั้ง โตตามเลเวล)
-    const rx = 0.5 + Math.min(cap, 11) * 0.11
-    const ry = 0.42 + Math.min(cap, 11) * 0.08
-    const cy = trunkTop + ry * 0.55 // จุดศูนย์กลางพุ่ม
+    const rx = 0.5 + Math.min(cap, 18) * 0.085
+    const ry = 0.42 + Math.min(cap, 18) * 0.06
+    const cy = trunkTop + ry * 0.5
 
-    // ใบ: คลัสเตอร์ทรงรีหลายลูกซ้อนกัน ยิ่งเลเวลสูงยิ่งเยอะ
-    const leafCount = Math.round(10 + cap * 5)
+    // ก้อนพุ่มเนียน ๆ ด้านในไว้ให้ทึบ (กันโปร่ง)
+    const blobs = []
+    const blobN = Math.min(3 + Math.floor(cap / 3), 7)
+    for (let i = 0; i < blobN; i++) {
+      const u = rnd() * Math.PI * 2
+      const rr = 0.4 * rnd()
+      blobs.push({
+        p: [Math.cos(u) * rx * rr, cy + (rnd() - 0.5) * ry, Math.sin(u) * rx * rr],
+        s: ry * (0.7 + rnd() * 0.4),
+        c: st.leaves[0],
+      })
+    }
+
+    // ใบไม้แบน (เยอะตามเลเวล)
+    const leafN = Math.min(24 + cap * 7, 170)
     const leaves = []
-    for (let i = 0; i < leafCount; i++) {
+    for (let i = 0; i < leafN; i++) {
       const u = rnd() * Math.PI * 2
       const v = Math.acos(2 * rnd() - 1)
-      const rr = 0.55 + 0.45 * rnd() // กระจายในก้อนพุ่ม
+      const rr = 0.7 + 0.45 * rnd()
       const x = Math.cos(u) * Math.sin(v) * rx * rr
       const y = cy + Math.cos(v) * ry * rr
       const z = Math.sin(u) * Math.sin(v) * rx * rr
-      const s = 0.26 + rnd() * 0.22 + cap * 0.012
-      leaves.push({ p: [x, y, z], s, c: GREENS[Math.floor(rnd() * GREENS.length)] })
+      leaves.push({
+        p: [x, y, z],
+        r: [rnd() * Math.PI, rnd() * Math.PI * 2, rnd() * Math.PI],
+        s: 0.34 + rnd() * 0.22,
+        c: st.leaves[Math.floor(rnd() * st.leaves.length)],
+      })
     }
 
-    // ดอก/ผล เมื่อโตพอ
+    // ดอก/ผล
     const decos = []
-    if (cap >= 4) {
-      const n = Math.min(3 + (cap - 3) * 2, 16)
-      for (let i = 0; i < n; i++) {
+    if (st.deco) {
+      for (let i = 0; i < st.decoN; i++) {
         const u = rnd() * Math.PI * 2
-        const v = 0.3 + rnd() * 1.5
-        const x = Math.cos(u) * Math.sin(v) * rx * 0.85
-        const y = cy + Math.cos(v) * ry * 0.7
-        const z = Math.sin(u) * Math.sin(v) * rx * 0.85
-        const flower = cap < 7
-        decos.push({ p: [x, y, z], s: flower ? 0.1 : 0.12, c: flower ? '#ffd34e' : '#ff5d8f' })
+        const v = 0.25 + rnd() * 1.6
+        decos.push({
+          p: [
+            Math.cos(u) * Math.sin(v) * rx * 0.92,
+            cy + Math.cos(v) * ry * 0.85,
+            Math.sin(u) * Math.sin(v) * rx * 0.92,
+          ],
+          s: st.golden ? 0.13 : st.deco === '#ef4444' || st.deco === '#e03131' ? 0.13 : 0.1,
+        })
       }
     }
 
     const top = cy + ry
-    const totalH = top + 0.3 // +ฐานกระถาง
-    const fit = Math.min(1, 3.4 / totalH) // ย่อให้พอดีกรอบเสมอ
-    return { trunkH, trunkTop, leaves, decos, fit, totalH }
+    const totalH = top + 0.3
+    const fit = Math.min(1, 3.7 / totalH)
+    return { trunkH, trunkTop, blobs, leaves, decos, st, fit, totalH }
   }, [cap])
 
-  const { trunkH, trunkTop, leaves, decos, fit, totalH } = model
+  const { trunkH, blobs, leaves, decos, st, fit, totalH } = model
 
   return (
     <group ref={g}>
-      {/* ย่อ-จัดกึ่งกลางให้ทั้งต้นอยู่ในกรอบ */}
-      <group scale={fit} position={[0, -(totalH * fit) / 2 - 0.1, 0]}>
+      <group scale={fit} position={[0, -(totalH * fit) / 2 - 0.05, 0]}>
         {/* กระถาง */}
         <mesh position={[0, 0, 0]}>
-          <cylinderGeometry args={[0.6, 0.44, 0.58, 24]} />
-          <meshStandardMaterial color="#cf6a43" flatShading />
+          <cylinderGeometry args={[0.6, 0.44, 0.56, 28]} />
+          <meshStandardMaterial color="#cf6a43" roughness={0.8} />
         </mesh>
-        <mesh position={[0, 0.29, 0]}>
-          <cylinderGeometry args={[0.58, 0.58, 0.12, 24]} />
+        <mesh position={[0, 0.28, 0]}>
+          <cylinderGeometry args={[0.58, 0.58, 0.12, 28]} />
           <meshStandardMaterial color="#5a3826" />
         </mesh>
-        {/* ลำต้น */}
+        {/* ลำต้น (เนียน) */}
         <mesh position={[0, 0.35 + trunkH / 2, 0]}>
-          <cylinderGeometry args={[0.09, 0.15, trunkH, 10]} />
-          <meshStandardMaterial color="#8a5a2b" flatShading />
+          <cylinderGeometry args={[0.085, 0.15, trunkH, 16]} />
+          <meshStandardMaterial color="#8a5a2b" roughness={0.9} />
         </mesh>
-        {/* กิ่งเล็ก ๆ เมื่อโต */}
-        {cap >= 3 && (
-          <mesh position={[0.12, trunkTop - 0.15, 0]} rotation={[0, 0, -0.6]}>
-            <cylinderGeometry args={[0.04, 0.06, 0.4, 8]} />
-            <meshStandardMaterial color="#8a5a2b" flatShading />
-          </mesh>
-        )}
-        {/* ใบ (พุ่มเต็ม) */}
-        {leaves.map((lf, i) => (
-          <mesh key={i} position={lf.p}>
-            <icosahedronGeometry args={[lf.s, 1]} />
-            <meshStandardMaterial color={lf.c} flatShading />
+        {/* พุ่มทึบด้านใน */}
+        {blobs.map((b, i) => (
+          <mesh key={i} position={b.p}>
+            <sphereGeometry args={[b.s, 16, 16]} />
+            <meshStandardMaterial color={b.c} roughness={0.85} />
           </mesh>
         ))}
+        {/* ใบไม้แบน */}
+        <Leaves leaves={leaves} geometry={leafGeo} />
         {/* ดอก/ผล */}
         {decos.map((d, i) => (
           <mesh key={i} position={d.p}>
-            <icosahedronGeometry args={[d.s, 0]} />
-            <meshStandardMaterial color={d.c} flatShading />
+            <sphereGeometry args={[d.s, 12, 12]} />
+            <meshStandardMaterial
+              color={st.deco}
+              emissive={st.golden ? st.deco : '#000000'}
+              emissiveIntensity={st.golden ? 0.45 : 0}
+              roughness={st.golden ? 0.3 : 0.6}
+              metalness={st.golden ? 0.6 : 0}
+            />
           </mesh>
         ))}
       </group>
@@ -116,8 +180,8 @@ function Tree({ level }) {
 
 export default function Tree3D({ level = 1 }) {
   return (
-    <Canvas camera={{ position: [0, 0, 6 ], fov: 42 }} dpr={[1, 2]}>
-      <ambientLight intensity={0.82} />
+    <Canvas camera={{ position: [0, 0, 6], fov: 42 }} dpr={[1, 2]}>
+      <ambientLight intensity={0.85} />
       <directionalLight position={[3, 6, 4]} intensity={1.15} />
       <directionalLight position={[-4, 2, -3]} intensity={0.35} color="#bdf0ff" />
       <Suspense fallback={null}>

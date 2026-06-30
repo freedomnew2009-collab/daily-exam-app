@@ -28,13 +28,13 @@ function TreeLevelsPreview() {
       <input
         type="range"
         min={1}
-        max={12}
+        max={20}
         value={lv}
         onChange={(e) => setLv(Number(e.target.value))}
         className="w-full accent-emerald-500"
       />
       <div className="flex flex-wrap gap-1.5">
-        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+        {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
           <button
             key={n}
             onClick={() => setLv(n)}
