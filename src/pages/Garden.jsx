@@ -13,10 +13,26 @@ const LEVEL_NAMES = [
 ]
 const levelName = (lv) => LEVEL_NAMES[Math.min(lv - 1, LEVEL_NAMES.length - 1)]
 
+// แคตตาล็อก Achievement — คำนวณจาก get_game_stats
+const ACHIEVEMENTS = [
+  { icon: '🌱', title: 'ก้าวแรก', desc: 'ทำข้อสอบครั้งแรก', need: 1, get: (s) => s.exams_done },
+  { icon: '📚', title: 'ขยันทำ', desc: 'ทำข้อสอบ 10 ครั้ง', need: 10, get: (s) => s.exams_done },
+  { icon: '🎯', title: 'แม่นยำ', desc: 'ตอบถูกสะสม 100 ข้อ', need: 100, get: (s) => s.total_correct },
+  { icon: '🏹', title: 'มือฉมัง', desc: 'ตอบถูกสะสม 500 ข้อ', need: 500, get: (s) => s.total_correct },
+  { icon: '🔥', title: 'ไฟลุก', desc: 'ทำติดกัน 3 วัน', need: 3, get: (s) => Math.max(s.streak, s.longest_streak) },
+  { icon: '🔥', title: 'ไฟแรง', desc: 'ทำติดกัน 7 วัน', need: 7, get: (s) => Math.max(s.streak, s.longest_streak) },
+  { icon: '⚡', title: 'ไฟไม่มอด', desc: 'ทำติดกัน 30 วัน', need: 30, get: (s) => Math.max(s.streak, s.longest_streak) },
+  { icon: '🌳', title: 'คนสวนมือใหม่', desc: 'ต้นไม้เลเวล 5', need: 5, get: (s) => s.tree_level },
+  { icon: '🌲', title: 'นักปลูกต้นไม้', desc: 'ต้นไม้เลเวล 10', need: 10, get: (s) => s.tree_level },
+  { icon: '💯', title: 'เพอร์เฟกต์', desc: 'ได้คะแนนเต็ม 1 ชุด', need: 1, get: (s) => s.perfect_count },
+  { icon: '📖', title: 'หนอนหนังสือ', desc: 'อ่านบทความจบ 5 เรื่อง', need: 5, get: (s) => s.articles_read },
+]
+
 export default function Garden() {
   const { user } = useStore()
   const navigate = useNavigate()
   const [g, setG] = useState(null)
+  const [stats, setStats] = useState(null) // game stats: streak, goal, achievements
   const [loading, setLoading] = useState(true)
   const [watering, setWatering] = useState(false)
   const [celebrate, setCelebrate] = useState(null) // { level }
@@ -27,8 +43,12 @@ export default function Garden() {
         setLoading(false)
         return
       }
-      const { data } = await supabase.rpc('get_garden', { p_user_id: user.id })
+      const [{ data }, { data: gs }] = await Promise.all([
+        supabase.rpc('get_garden', { p_user_id: user.id }),
+        supabase.rpc('get_game_stats', { p_user_id: user.id }),
+      ])
       setG(data)
+      setStats(gs)
       setLoading(false)
     })()
   }, [user.id])
@@ -123,12 +143,89 @@ export default function Garden() {
         )}
       </div>
 
+      {/* 🔥 Streak + 🎯 เป้าหมายรายวัน */}
+      {stats && (
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-gradient-to-br from-orange-400 to-rose-500 p-4 text-center text-white shadow-md shadow-orange-300/40">
+            <p className="text-3xl font-extrabold leading-none">
+              🔥 {stats.streak}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-white/90">วันติดต่อกัน</p>
+            <p className="mt-1 text-[10px] text-white/70">สถิติสูงสุด {stats.longest_streak} วัน</p>
+          </div>
+          {(() => {
+            const gc = Math.min(stats.goal_correct, stats.daily_goal)
+            const pct = stats.daily_goal ? Math.round((gc / stats.daily_goal) * 100) : 0
+            const done = stats.goal_correct >= stats.daily_goal
+            return (
+              <div className="rounded-2xl bg-white/80 p-4 text-center shadow-sm">
+                <p className="text-xs font-semibold text-slate-500">🎯 เป้าหมายวันนี้</p>
+                <p className="mt-0.5 text-2xl font-extrabold text-violet-600">
+                  {stats.goal_correct}
+                  <span className="text-sm text-slate-400">/{stats.daily_goal}</span>
+                </p>
+                <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-violet-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-[10px] font-semibold text-emerald-600">
+                  {done ? '✅ สำเร็จแล้ว! +5 หยด' : `ตอบถูกอีก ${stats.daily_goal - stats.goal_correct} ข้อ`}
+                </p>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* 🏅 Achievement */}
+      {stats && (
+        <div className="mt-4">
+          <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-slate-700">
+            <span className="text-xl">🏅</span> เหรียญรางวัล
+            <span className="text-xs font-normal text-slate-400">
+              ({ACHIEVEMENTS.filter((a) => a.get(stats) >= a.need).length}/{ACHIEVEMENTS.length})
+            </span>
+          </h2>
+          <div className="grid grid-cols-3 gap-2">
+            {ACHIEVEMENTS.map((a, i) => {
+              const cur = a.get(stats)
+              const got = cur >= a.need
+              return (
+                <div
+                  key={i}
+                  className={`rounded-2xl border-2 p-2.5 text-center ${
+                    got ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'
+                  }`}
+                >
+                  <div className={`text-3xl ${got ? '' : 'opacity-30 grayscale'}`}>{a.icon}</div>
+                  <p className={`mt-1 text-[11px] font-bold leading-tight ${got ? 'text-amber-700' : 'text-slate-400'}`}>
+                    {a.title}
+                  </p>
+                  <p className="mt-0.5 text-[9px] leading-tight text-slate-400">{a.desc}</p>
+                  {got ? (
+                    <p className="mt-0.5 text-[10px] font-bold text-emerald-500">✓ สำเร็จ</p>
+                  ) : (
+                    <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                      {Math.min(cur, a.need)}/{a.need}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* วิธีได้หยดน้ำ */}
       <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3 text-sm text-emerald-800">
         <p className="font-bold">🌱 วิธีเลี้ยงต้นไม้</p>
         <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs leading-relaxed text-emerald-700">
           <li>ตอบข้อสอบ <b>ถูก 1 ข้อ = ได้ 1 หยดน้ำ 💧</b> (ทั้งข้อสอบรายวันและรายหมวด)</li>
           <li>รดน้ำครบ <b>{per} หยด = อัป 1 เลเวล</b> ต้นไม้จะโตขึ้นเรื่อย ๆ</li>
+          <li>🔥 <b>ทำติดกันทุกวัน</b> ได้โบนัสหยดน้ำ (3 วัน +3 · 7 วัน +10 · 30 วัน +30)</li>
+          <li>🎯 ทำ <b>เป้าหมายรายวันสำเร็จ +5 หยด</b></li>
           <li>ยิ่งเลเวลสูง ต้นไม้ยิ่งใหญ่ และจะ <b>ผลิดอกออกผล</b> 🌸🍎</li>
         </ul>
       </div>

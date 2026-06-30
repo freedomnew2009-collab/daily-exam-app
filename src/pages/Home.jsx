@@ -29,6 +29,7 @@ export default function Home({ onSeen }) {
   const [attempts, setAttempts] = useState({}) // setId -> { count, best }
   const [newArticles, setNewArticles] = useState(0) // จำนวนบทความใหม่ที่ยังไม่ได้อ่าน
   const [garden, setGarden] = useState(null) // { drops, level }
+  const [streak, setStreak] = useState(0)
 
   const load = useCallback(async () => {
     if (!isConfigured) {
@@ -37,8 +38,13 @@ export default function Home({ onSeen }) {
     }
     setLoading(true)
     const lastSeenArticles = getLastSeenArticles()
-    const [{ data: setsData }, { data: attemptData }, { count: newArticleCount }, { data: gardenData }] =
-      await Promise.all([
+    const [
+      { data: setsData },
+      { data: attemptData },
+      { count: newArticleCount },
+      { data: gardenData },
+      { data: gsData },
+    ] = await Promise.all([
         supabase
           .from('exam_sets')
           .select('id, day_number, title, created_at, question_count')
@@ -55,9 +61,11 @@ export default function Home({ onSeen }) {
           .eq('published', true)
           .gt('created_at', lastSeenArticles),
         supabase.rpc('get_garden', { p_user_id: user.id }),
+        supabase.rpc('get_game_stats', { p_user_id: user.id }),
       ])
     setNewArticles(newArticleCount || 0)
     setGarden(gardenData || null)
+    setStreak(gsData?.streak || 0)
 
     const map = {}
     for (const a of attemptData || []) {
@@ -107,7 +115,10 @@ export default function Home({ onSeen }) {
       >
         <span className="text-3xl">🌳</span>
         <span className="min-w-0 flex-1">
-          <span className="block font-bold">สวนต้นไม้ของฉัน · เลเวล {garden?.level ?? 1}</span>
+          <span className="block font-bold">
+            สวนต้นไม้ของฉัน · เลเวล {garden?.level ?? 1}
+            {streak > 0 && <span className="ml-1">· 🔥 {streak} วันติด</span>}
+          </span>
           <span className="block text-xs text-white/85">
             {garden?.drops > 0
               ? `💧 มี ${garden.drops} หยดน้ำรอรดต้นไม้ — แตะเลย!`
