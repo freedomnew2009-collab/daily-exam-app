@@ -2,8 +2,12 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase, isConfigured } from '../lib/supabase'
-import { getLastSeen, setLastSeen, getLastSeenArticles } from '../lib/notify'
+import { setLastSeen, getLastSeenArticles } from '../lib/notify'
 import { Spinner, Button, Card, Badge, Empty } from '../components/ui'
+
+// ชุดข้อสอบถือว่า "ใหม่" ถ้าเพิ่งเผยแพร่ภายในกี่วันนี้ (และยังไม่ได้ทำ)
+const NEW_DAYS = 14
+const isRecent = (iso) => Date.now() - new Date(iso).getTime() < NEW_DAYS * 86400000
 
 function greeting() {
   const h = new Date().getHours()
@@ -23,7 +27,6 @@ export default function Home({ onSeen }) {
   const [loading, setLoading] = useState(true)
   const [sets, setSets] = useState([])
   const [attempts, setAttempts] = useState({}) // setId -> { count, best }
-  const [lastSeenAtLoad] = useState(getLastSeen())
   const [newArticles, setNewArticles] = useState(0) // จำนวนบทความใหม่ที่ยังไม่ได้อ่าน
   const [garden, setGarden] = useState(null) // { drops, level }
 
@@ -40,7 +43,7 @@ export default function Home({ onSeen }) {
           .from('exam_sets')
           .select('id, day_number, title, created_at, question_count')
           .eq('published', true)
-          .order('day_number', { ascending: true }),
+          .order('created_at', { ascending: false }), // ชุดที่เผยแพร่ใหม่ล่าสุดอยู่บนสุดเสมอ
         supabase
           .from('attempts')
           .select('exam_set_id, score, total, completed')
@@ -144,22 +147,32 @@ export default function Home({ onSeen }) {
           {sets.map((s) => {
             const a = attempts[s.id]
             const done = a && a.count > 0
-            const isNew = new Date(s.created_at) > new Date(lastSeenAtLoad)
+            // "ใหม่" = เพิ่งเผยแพร่ + ยังไม่เคยกดเข้าไปทำ (พอทำแล้วสติกเกอร์จะหายไป)
+            const isNew = !done && isRecent(s.created_at)
             return (
-              <Card key={s.id} className="animate-rise overflow-hidden">
+              <Card
+                key={s.id}
+                className={`animate-rise relative overflow-hidden ${
+                  isNew ? 'ring-2 ring-rose-300' : ''
+                }`}
+              >
+                {isNew && (
+                  <span className="animate-pop absolute right-2 top-2 z-10 rotate-6 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-2.5 py-1 text-xs font-extrabold text-white shadow-md shadow-rose-300/50">
+                    ✨ NEW!
+                  </span>
+                )}
                 <div className="flex items-start gap-3">
                   <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 text-2xl text-violet-600">
                     📝
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {isNew && <Badge color="red">✨ ใหม่</Badge>}
-                      {done && (
+                    {done && (
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <Badge color="green">
                           🏆 สูงสุด {a.best}/{a.total ?? s.question_count}
                         </Badge>
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <p className="mt-0.5 truncate font-bold text-slate-800">{s.title || 'ชุดข้อสอบ'}</p>
                     <p className="text-xs text-slate-400">{s.question_count ?? 5} ข้อ · ลุยกันเลย!</p>
                   </div>
