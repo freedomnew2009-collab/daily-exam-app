@@ -2,7 +2,6 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Suspense, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
-// สุ่มแบบมี seed (ฟอร์มเดิมทุกครั้งสำหรับเลเวลเดียวกัน)
 function mulberry32(seed) {
   let a = seed >>> 0
   return () => {
@@ -14,123 +13,149 @@ function mulberry32(seed) {
   }
 }
 
-// รูปใบไม้ (โค้งปลายแหลม) จุดหมุนที่โคนใบ
-function makeLeafGeometry() {
-  const s = new THREE.Shape()
-  s.moveTo(0, 0)
-  s.bezierCurveTo(0.32, 0.22, 0.26, 0.74, 0, 1)
-  s.bezierCurveTo(-0.26, 0.74, -0.32, 0.22, 0, 0)
-  const g = new THREE.ShapeGeometry(s, 10)
-  return g
+// gradient map 3 สเต็ป สำหรับ toon (cel) shading
+function useToonGradient() {
+  return useMemo(() => {
+    const data = new Uint8Array([95, 175, 255])
+    const t = new THREE.DataTexture(data, 3, 1, THREE.RedFormat)
+    t.minFilter = THREE.NearestFilter
+    t.magFilter = THREE.NearestFilter
+    t.needsUpdate = true
+    return t
+  }, [])
 }
 
-// ดอกตามเลเวล (อิงรูปการ์ตูน: 10 ชมพู, 16-19 ชมพูเพิ่มขึ้น, 20 หลากสีเต็มต้น)
 function bloomOf(lv) {
-  if (lv === 10) return { colors: ['#f48fb1', '#f06292'], n: 16 }
-  if (lv >= 16 && lv <= 17) return { colors: ['#f48fb1', '#f8bbd0'], n: 10 }
-  if (lv >= 18 && lv <= 19) return { colors: ['#ec5f9e', '#f48fb1'], n: 20 }
-  if (lv >= 20) return { colors: ['#e040a0', '#ffd54f', '#f48fb1', '#ba68c8'], n: 40 }
+  if (lv === 10) return { colors: ['#f48fb1', '#f06292'], n: 18 }
+  if (lv >= 16 && lv <= 17) return { colors: ['#f48fb1', '#f8bbd0'], n: 12 }
+  if (lv >= 18 && lv <= 19) return { colors: ['#ec5f9e', '#f48fb1'], n: 22 }
+  if (lv >= 20) return { colors: ['#e040a0', '#ffd54f', '#f48fb1', '#ba68c8'], n: 46 }
   return null
 }
 
-// ชุดสีเขียว เข้มขึ้นเล็กน้อยตามอายุ (ใช้ดัชนี 0-3)
 function greenOf(lv) {
-  if (lv >= 13) return ['#62c25a', '#4caf50', '#3f9e47', '#368f3d']
-  if (lv >= 8) return ['#7cc96a', '#62c25a', '#4caf50', '#3f9e47']
-  return ['#86d673', '#7cc96a', '#62c25a', '#54bb50']
+  if (lv >= 13) return ['#57b94f', '#49a843', '#3c9239']
+  if (lv >= 8) return ['#69c95f', '#57b94f', '#49a843']
+  return ['#86d673', '#76cb63', '#63c25a']
+}
+
+// ลูกใบ/ลำต้น ที่มีเส้นขอบ (วาด backface สีเข้มไว้ข้างหลัง)
+function Sphere({ p, r, color, grad, outline = '#234d22', seg = 22 }) {
+  return (
+    <group position={p}>
+      <mesh scale={1.07}>
+        <sphereGeometry args={[r, seg, Math.round(seg * 0.7)]} />
+        <meshBasicMaterial color={outline} side={THREE.BackSide} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[r, seg, Math.round(seg * 0.7)]} />
+        <meshToonMaterial color={color} gradientMap={grad} />
+      </mesh>
+    </group>
+  )
+}
+
+// ใบต้นอ่อน = ก้อนใบป้อม (ellipsoid) แผ่ออกด้านข้าง มีเส้นขอบ
+function LeafBlob({ a, h, s, color, grad }) {
+  const sc = [s * 1.5, s * 0.5, s * 0.85]
+  return (
+    <group rotation={[0, a, 0]}>
+      <group position={[0, h, 0]} rotation={[0, 0, 0.5]}>
+        <group position={[s * 0.85, 0, 0]}>
+          <mesh scale={[sc[0] * 1.12, sc[1] * 1.16, sc[2] * 1.12]}>
+            <sphereGeometry args={[1, 16, 12]} />
+            <meshBasicMaterial color="#234d22" side={THREE.BackSide} />
+          </mesh>
+          <mesh scale={sc}>
+            <sphereGeometry args={[1, 16, 12]} />
+            <meshToonMaterial color={color} gradientMap={grad} />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
 }
 
 function Tree({ level }) {
   const g = useRef()
   useFrame((_, dt) => {
-    if (g.current) g.current.rotation.y += dt * 0.4
+    if (g.current) g.current.rotation.y += dt * 0.38
   })
-
-  const leafGeo = useMemo(() => makeLeafGeometry(), [])
+  const grad = useToonGradient()
   const cap = Math.max(1, Math.min(level, 20))
   const seedling = cap <= 7
+  const greens = greenOf(cap)
 
   const model = useMemo(() => {
-    const rnd = mulberry32(4000 + cap)
-    const greens = greenOf(cap)
-    const baseY = 0.18 // ยอดเนินดิน
-
+    const rnd = mulberry32(5000 + cap)
+    const baseY = 0.2
     if (seedling) {
-      // ---- ต้นอ่อน/ต้นกล้า: ลำต้นเขียว + ใบจริงวางเป็นคู่ ----
       const stemH = 0.22 + cap * 0.17
-      const pairs = Math.max(1, Math.min(cap - 1, 4)) // จำนวนคู่ใบ
+      const pairs = Math.max(1, Math.min(cap - 1, 4))
       const leaves = []
       if (cap === 1) {
-        leaves.push({ h: baseY + stemH * 0.7, a: 0.2, tilt: 0.5, s: 0.55 })
+        leaves.push({ h: baseY + stemH * 0.55, a: 0.25, tilt: 0.45, s: 0.6 })
       } else {
         for (let i = 0; i < pairs; i++) {
-          const h = baseY + stemH * (0.35 + (i / pairs) * 0.6)
-          const s = 0.26 + (i / pairs) * 0.18 + cap * 0.01
-          const baseA = i % 2 ? Math.PI / 2 : 0
-          leaves.push({ h, a: baseA, tilt: 0.9, s })
-          leaves.push({ h, a: baseA + Math.PI, tilt: 0.9, s })
+          const h = baseY + stemH * (0.32 + (i / pairs) * 0.62)
+          const s = 0.27 + (i / pairs) * 0.2 + cap * 0.01
+          const a0 = i % 2 ? Math.PI / 2 : 0
+          leaves.push({ h, a: a0, tilt: 0.95, s })
+          leaves.push({ h, a: a0 + Math.PI, tilt: 0.95, s })
         }
-        // ใบยอด
-        leaves.push({ h: baseY + stemH * 1.02, a: 0.3, tilt: 0.35, s: 0.3 + cap * 0.012 })
+        leaves.push({ h: baseY + stemH * 1.04, a: 0.3, tilt: 0.3, s: 0.32 + cap * 0.012 })
       }
       const totalH = baseY + stemH + 0.4
-      return { mode: 'seedling', stemH, leaves, baseY, greens, totalH, fit: Math.min(1, 3.6 / totalH), face: cap >= 2 && cap <= 4 }
+      return { mode: 'seedling', stemH, leaves, baseY, totalH, fit: Math.min(1, 3.5 / totalH), face: cap >= 2 && cap <= 4 }
     }
 
-    // ---- ต้นไม้: ลำต้นน้ำตาล + พุ่มกลมก้อนใบ + ดอก ----
     const age = cap - 7
-    const trunkH = 0.55 + age * 0.11
-    const trunkR = 0.075 + age * 0.012
+    const trunkH = 0.5 + age * 0.1
+    const trunkR = 0.08 + age * 0.014
     const trunkTop = baseY + trunkH
-    const crownR = 0.55 + age * 0.055
-    const cy = trunkTop + crownR * 0.5
+    const crownR = 0.6 + age * 0.05
+    const cy = trunkTop + crownR * 0.45
 
-    // ก้อนพุ่มหลัก (กลมฟู)
-    const blobs = [{ p: [0, cy, 0], r: crownR, c: greens[2] }]
-    const ringN = Math.min(5 + Math.floor(age / 2), 9)
+    // พุ่มเป็นก้อนกลมจัดเรียงเป็นทรงเมฆ (สะอาด ไม่รก)
+    const lobes = [{ p: [0, cy + crownR * 0.1, 0], r: crownR }]
+    const ringN = 6
     for (let i = 0; i < ringN; i++) {
-      const a = (i / ringN) * Math.PI * 2 + (cap % 2 ? 0.35 : 0)
-      const rr = crownR * 0.78
-      blobs.push({
-        p: [Math.cos(a) * rr, cy + (rnd() * 0.16 - 0.04) * crownR, Math.sin(a) * rr],
-        r: crownR * 0.6,
-        c: i % 2 ? greens[1] : greens[3],
+      const a = (i / ringN) * Math.PI * 2 + (cap % 2 ? 0.4 : 0)
+      const rr = crownR * 0.82
+      lobes.push({
+        p: [Math.cos(a) * rr, cy + (i % 2 ? 0.12 : -0.06) * crownR, Math.sin(a) * rr],
+        r: crownR * 0.62,
       })
     }
-    blobs.push({ p: [0, cy + crownR * 0.7, 0], r: crownR * 0.6, c: greens[1] })
+    lobes.push({ p: [0, cy + crownR * 0.78, 0], r: crownR * 0.66 })
 
-    // ปุ่มใบเล็ก ๆ บนผิวพุ่ม (ให้ดูเป็นก้อนใบการ์ตูน)
-    const bumps = []
-    const bumpN = Math.min(16 + age * 4, 60)
-    for (let i = 0; i < bumpN; i++) {
-      const u = rnd() * Math.PI * 2
-      const v = Math.acos(2 * rnd() - 1)
-      const R = crownR * (0.94 + rnd() * 0.12)
-      bumps.push({
-        p: [Math.cos(u) * Math.sin(v) * R, cy + Math.cos(v) * R * 0.92, Math.sin(u) * Math.sin(v) * R],
-        r: crownR * (0.16 + rnd() * 0.08),
-        c: rnd() > 0.5 ? greens[1] : greens[0],
-      })
+    // กิ่ง (โผล่จากลำต้นเข้าไปในพุ่ม) เมื่อโต
+    const branches = []
+    if (cap >= 9) {
+      const bn = Math.min(2 + Math.floor(age / 2), 4)
+      for (let i = 0; i < bn; i++) {
+        const a = (i / bn) * Math.PI * 2 + 0.6
+        branches.push({ a, len: crownR * 0.9, tilt: 0.6 })
+      }
     }
 
-    // ดอก
     const bloom = bloomOf(cap)
     const flowers = []
     if (bloom) {
       for (let i = 0; i < bloom.n; i++) {
         const u = rnd() * Math.PI * 2
-        const v = 0.2 + rnd() * 1.5
-        const R = crownR * 1.02
+        const v = 0.2 + rnd() * 1.45
+        const R = crownR * 1.04
         flowers.push({
-          p: [Math.cos(u) * Math.sin(v) * R, cy + Math.cos(v) * R * 0.92, Math.sin(u) * Math.sin(v) * R],
-          r: crownR * (0.12 + rnd() * 0.05),
+          p: [Math.cos(u) * Math.sin(v) * R, cy + crownR * 0.1 + Math.cos(v) * R * 0.9, Math.sin(u) * Math.sin(v) * R],
+          r: crownR * (0.13 + rnd() * 0.05),
           c: bloom.colors[Math.floor(rnd() * bloom.colors.length)],
         })
       }
     }
 
-    const totalH = cy + crownR * 1.3 + 0.3
-    return { mode: 'tree', trunkH, trunkR, trunkTop, blobs, bumps, flowers, baseY, greens, totalH, fit: Math.min(1, 3.8 / totalH) }
+    const totalH = cy + crownR * 1.45 + 0.3
+    return { mode: 'tree', trunkH, trunkR, trunkTop, baseY, lobes, branches, flowers, totalH, fit: Math.min(1, 3.9 / totalH) }
   }, [cap, seedling])
 
   const { fit, totalH } = model
@@ -139,84 +164,88 @@ function Tree({ level }) {
     <group ref={g}>
       <group scale={fit} position={[0, -(totalH * fit) / 2 - 0.05, 0]}>
         {/* เนินดิน */}
-        <mesh position={[0, 0.02, 0]} scale={[0.85, 0.4, 0.85]}>
-          <sphereGeometry args={[0.62, 24, 18]} />
-          <meshStandardMaterial color="#6b4a2b" roughness={1} />
-        </mesh>
-        <mesh position={[0, 0.16, 0]} scale={[0.78, 0.2, 0.78]}>
-          <sphereGeometry args={[0.6, 24, 14]} />
-          <meshStandardMaterial color="#7a552f" roughness={1} />
-        </mesh>
+        <group>
+          <mesh position={[0, 0.02, 0]} scale={[0.9, 0.42, 0.9]}>
+            <sphereGeometry args={[0.62, 26, 18]} />
+            <meshToonMaterial color="#7a552f" gradientMap={grad} />
+          </mesh>
+          <mesh position={[0, 0.02, 0]} scale={[0.95, 0.45, 0.95]}>
+            <sphereGeometry args={[0.62, 26, 18]} />
+            <meshBasicMaterial color="#3a2718" side={THREE.BackSide} />
+          </mesh>
+        </group>
 
         {model.mode === 'seedling' ? (
           <>
-            {/* ลำต้นเขียว */}
             <mesh position={[0, model.baseY + model.stemH / 2, 0]}>
-              <cylinderGeometry args={[0.045, 0.06, model.stemH, 10]} />
-              <meshStandardMaterial color="#6cae3e" roughness={0.7} />
+              <cylinderGeometry args={[0.045, 0.062, model.stemH, 12]} />
+              <meshToonMaterial color="#6cae3e" gradientMap={grad} />
             </mesh>
-            {/* ใบ */}
             {model.leaves.map((lf, i) => (
-              <group key={i} rotation={[0, lf.a, 0]}>
-                <mesh
-                  geometry={leafGeo}
-                  position={[0, lf.h, 0.04]}
-                  rotation={[lf.tilt, 0, 0]}
-                  scale={lf.s}
-                >
-                  <meshStandardMaterial color={model.greens[1]} side={THREE.DoubleSide} roughness={0.6} />
-                </mesh>
-              </group>
+              <LeafBlob key={i} a={lf.a} h={lf.h} s={lf.s} color={greens[1]} grad={grad} />
             ))}
-            {/* หน้ายิ้มน่ารักบนเนินดิน */}
             {model.face && (
-              <group position={[0, 0.2, 0.42]}>
+              <group position={[0, 0.22, 0.44]}>
                 <mesh position={[-0.12, 0, 0]}>
-                  <sphereGeometry args={[0.035, 10, 10]} />
-                  <meshStandardMaterial color="#3a2a1a" />
+                  <sphereGeometry args={[0.035, 12, 12]} />
+                  <meshBasicMaterial color="#3a2a1a" />
                 </mesh>
                 <mesh position={[0.12, 0, 0]}>
-                  <sphereGeometry args={[0.035, 10, 10]} />
-                  <meshStandardMaterial color="#3a2a1a" />
+                  <sphereGeometry args={[0.035, 12, 12]} />
+                  <meshBasicMaterial color="#3a2a1a" />
                 </mesh>
-                <mesh position={[-0.2, -0.05, 0.02]}>
-                  <sphereGeometry args={[0.04, 10, 10]} />
-                  <meshStandardMaterial color="#f7a8b8" transparent opacity={0.8} />
+                <mesh position={[-0.21, -0.05, 0]}>
+                  <sphereGeometry args={[0.04, 12, 12]} />
+                  <meshBasicMaterial color="#f29bb0" />
                 </mesh>
-                <mesh position={[0.2, -0.05, 0.02]}>
-                  <sphereGeometry args={[0.04, 10, 10]} />
-                  <meshStandardMaterial color="#f7a8b8" transparent opacity={0.8} />
+                <mesh position={[0.21, -0.05, 0]}>
+                  <sphereGeometry args={[0.04, 12, 12]} />
+                  <meshBasicMaterial color="#f29bb0" />
                 </mesh>
               </group>
             )}
           </>
         ) : (
           <>
-            {/* ลำต้น */}
-            <mesh position={[0, model.baseY + model.trunkH / 2, 0]}>
-              <cylinderGeometry args={[model.trunkR * 0.7, model.trunkR, model.trunkH, 14]} />
-              <meshStandardMaterial color="#8a5a2b" roughness={0.95} />
-            </mesh>
-            {/* พุ่มหลัก */}
-            {model.blobs.map((b, i) => (
-              <mesh key={`b${i}`} position={b.p}>
-                <sphereGeometry args={[b.r, 24, 18]} />
-                <meshStandardMaterial color={b.c} roughness={0.9} />
+            {/* ลำต้น (มีเส้นขอบ) */}
+            <group>
+              <mesh position={[0, model.baseY + model.trunkH / 2, 0]} scale={1.12}>
+                <cylinderGeometry args={[model.trunkR * 0.7, model.trunkR, model.trunkH, 14]} />
+                <meshBasicMaterial color="#4a3018" side={THREE.BackSide} />
               </mesh>
+              <mesh position={[0, model.baseY + model.trunkH / 2, 0]}>
+                <cylinderGeometry args={[model.trunkR * 0.7, model.trunkR, model.trunkH, 14]} />
+                <meshToonMaterial color="#9b6633" gradientMap={grad} />
+              </mesh>
+            </group>
+            {/* กิ่ง */}
+            {model.branches.map((br, i) => (
+              <group key={`br${i}`} rotation={[0, br.a, 0]}>
+                <mesh
+                  position={[Math.sin(br.tilt) * br.len * 0.5, model.trunkTop - 0.05 + Math.cos(br.tilt) * br.len * 0.5, 0]}
+                  rotation={[0, 0, -br.tilt]}
+                >
+                  <cylinderGeometry args={[model.trunkR * 0.35, model.trunkR * 0.55, br.len, 8]} />
+                  <meshToonMaterial color="#9b6633" gradientMap={grad} />
+                </mesh>
+              </group>
             ))}
-            {/* ปุ่มใบ */}
-            {model.bumps.map((b, i) => (
-              <mesh key={`p${i}`} position={b.p}>
-                <sphereGeometry args={[b.r, 12, 10]} />
-                <meshStandardMaterial color={b.c} roughness={0.85} />
-              </mesh>
+            {/* พุ่ม */}
+            {model.lobes.map((lo, i) => (
+              <Sphere key={`l${i}`} p={lo.p} r={lo.r} color={i % 2 ? greens[0] : greens[1]} grad={grad} />
             ))}
             {/* ดอก */}
             {model.flowers.map((f, i) => (
-              <mesh key={`f${i}`} position={f.p}>
-                <sphereGeometry args={[f.r, 12, 12]} />
-                <meshStandardMaterial color={f.c} roughness={0.55} emissive={f.c} emissiveIntensity={0.12} />
-              </mesh>
+              <group key={`f${i}`} position={f.p}>
+                <mesh scale={1.12}>
+                  <sphereGeometry args={[f.r, 12, 10]} />
+                  <meshBasicMaterial color="#7a3a5a" side={THREE.BackSide} />
+                </mesh>
+                <mesh>
+                  <sphereGeometry args={[f.r, 12, 10]} />
+                  <meshToonMaterial color={f.c} gradientMap={grad} emissive={f.c} emissiveIntensity={0.15} />
+                </mesh>
+              </group>
             ))}
           </>
         )}
@@ -227,10 +256,10 @@ function Tree({ level }) {
 
 export default function Tree3D({ level = 1 }) {
   return (
-    <Canvas camera={{ position: [0, 0, 6], fov: 42 }} dpr={[1, 2]}>
-      <ambientLight intensity={0.88} />
-      <directionalLight position={[3, 6, 4]} intensity={1.1} />
-      <directionalLight position={[-4, 2, -3]} intensity={0.35} color="#cfeefe" />
+    <Canvas camera={{ position: [0, 0, 6], fov: 42 }} dpr={[1, 2]} gl={{ antialias: true }}>
+      <ambientLight intensity={0.95} />
+      <directionalLight position={[3, 6, 4]} intensity={1.0} />
+      <directionalLight position={[-4, 2, -3]} intensity={0.3} color="#cfeefe" />
       <Suspense fallback={null}>
         <Tree level={level} />
       </Suspense>
