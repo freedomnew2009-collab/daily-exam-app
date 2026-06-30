@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Spinner, Button, Empty, Badge, AutoTextarea, formatDuration } from '../components/ui'
 import { AnswerInput } from '../components/AnswerInput'
 import { encodeAnswer, hasAnswer } from '../lib/questions'
+import { preloadImages } from '../lib/image'
 
 export default function Quiz() {
   const { setId } = useParams()
@@ -34,6 +35,7 @@ export default function Quiz() {
       setTotalSeconds(mins * 60)
       setRemaining(mins * 60)
       setQuestions(qs || [])
+      preloadImages((qs || []).map((q) => q.image_url)) // โหลดรูปทุกข้อไว้ล่วงหน้า
       setLoading(false)
     })()
   }, [setId])

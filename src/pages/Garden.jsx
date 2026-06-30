@@ -17,8 +17,8 @@ const levelName = (lv) => LEVEL_NAMES[Math.min(lv - 1, LEVEL_NAMES.length - 1)]
 const ACHIEVEMENTS = [
   { icon: '🌱', title: 'ก้าวแรก', desc: 'ทำข้อสอบครั้งแรก', need: 1, get: (s) => s.exams_done },
   { icon: '📚', title: 'ขยันทำ', desc: 'ทำข้อสอบ 10 ครั้ง', need: 10, get: (s) => s.exams_done },
-  { icon: '🎯', title: 'แม่นยำ', desc: 'ตอบถูกสะสม 100 ข้อ', need: 100, get: (s) => s.total_correct },
-  { icon: '🏹', title: 'มือฉมัง', desc: 'ตอบถูกสะสม 500 ข้อ', need: 500, get: (s) => s.total_correct },
+  { icon: '🎯', title: 'แม่นยำ', desc: 'ตอบถูกสะสม 30 ข้อ', need: 30, get: (s) => s.total_correct },
+  { icon: '🏹', title: 'มือฉมัง', desc: 'ตอบถูกสะสม 50 ข้อ', need: 50, get: (s) => s.total_correct },
   { icon: '🔥', title: 'ไฟลุก', desc: 'ทำติดกัน 3 วัน', need: 3, get: (s) => Math.max(s.streak, s.longest_streak) },
   { icon: '🔥', title: 'ไฟแรง', desc: 'ทำติดกัน 7 วัน', need: 7, get: (s) => Math.max(s.streak, s.longest_streak) },
   { icon: '⚡', title: 'ไฟไม่มอด', desc: 'ทำติดกัน 30 วัน', need: 30, get: (s) => Math.max(s.streak, s.longest_streak) },

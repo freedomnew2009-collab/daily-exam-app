@@ -1264,7 +1264,7 @@ create table if not exists game_stats (
   current_streak int not null default 0,   -- ทำข้อสอบติดต่อกันกี่วัน
   longest_streak int not null default 0,
   last_active date,                          -- วันล่าสุดที่ทำข้อสอบ (เวลาไทย)
-  daily_goal int not null default 10,        -- เป้าหมายตอบถูกต่อวัน
+  daily_goal int not null default 5,        -- เป้าหมายตอบถูกต่อวัน
   goal_date date,                            -- วันของเป้าหมายที่กำลังนับ
   goal_correct int not null default 0,       -- ตอบถูกวันนี้
   goal_claimed boolean not null default false, -- รับโบนัสเป้าหมายวันนี้แล้ว
@@ -1285,7 +1285,7 @@ begin
   select current_streak, longest_streak, last_active, daily_goal, goal_date, goal_correct, goal_claimed
     into v_streak, v_longest, v_last, v_goal, v_gdate, v_gcorrect, v_gclaimed
     from game_stats where user_id = p_user_id for update;
-  v_goal := coalesce(v_goal, 10);
+  v_goal := coalesce(v_goal, 5);
 
   -- streak: ทำซ้ำวันเดิม=คงเดิม, ต่อจากเมื่อวาน=+1, ขาด=เริ่มใหม่
   if v_last = v_today then
@@ -1340,7 +1340,7 @@ begin
   select current_streak, longest_streak, last_active, daily_goal, goal_date, goal_correct, goal_claimed
     into v_streak, v_longest, v_last, v_goal, v_gdate, v_gcorrect, v_gclaimed
     from game_stats where user_id = p_user_id;
-  v_goal := coalesce(v_goal, 10);
+  v_goal := coalesce(v_goal, 5);
   if v_last is null or v_last < v_today - 1 then v_streak := 0; end if;   -- streak ขาดแล้ว
   if v_gdate is distinct from v_today then v_gcorrect := 0; v_gclaimed := false; end if;
 

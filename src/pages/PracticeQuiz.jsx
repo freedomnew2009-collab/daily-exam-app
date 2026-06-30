@@ -6,6 +6,7 @@ import { Spinner, Button, Badge, Empty } from '../components/ui'
 import { AnswerInput, ReviewAnswer } from '../components/AnswerInput'
 import { gradeClient, hasAnswer, encodeAnswer, matchCorrect } from '../lib/questions'
 import { playFinishSound } from '../lib/sound'
+import { preloadImages } from '../lib/image'
 
 export default function PracticeQuiz({ mode }) {
   const { user } = useStore()
@@ -38,7 +39,9 @@ export default function PracticeQuiz({ mode }) {
       mode === 'wrong'
         ? await supabase.rpc('get_wrong_questions', { p_user_id: user.id })
         : await supabase.rpc('get_category_questions', { p_category: category, p_limit: 10 })
-    setQuestions(Array.isArray(res.data) ? res.data : [])
+    const list = Array.isArray(res.data) ? res.data : []
+    setQuestions(list)
+    preloadImages(list.flatMap((q) => [q.image_url, ...(q.explanation_images || [])])) // โหลดรูปล่วงหน้า
     setLoading(false)
   }, [mode, category, user.id])
 

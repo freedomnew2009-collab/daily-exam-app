@@ -1,3 +1,15 @@
+// โหลดรูปล่วงหน้า (warm browser cache) — เรียกตอนเริ่มทำข้อสอบ
+// เพื่อให้พอเลื่อนไปข้อถัดไป รูปขึ้นทันทีไม่ต้องรอโหลด
+export function preloadImages(urls) {
+  if (typeof window === 'undefined' || !Array.isArray(urls)) return
+  for (const u of urls) {
+    if (!u) continue
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = u
+  }
+}
+
 // ย่อ/บีบอัดรูปในเบราว์เซอร์ก่อนอัปโหลด เพื่อให้ไฟล์เล็กลง โหลดเร็วขึ้น
 // คงความคมไว้พอสำหรับอ่าน (เช่น audiogram) — ย่อด้านยาวสุดไม่เกิน maxDim แล้วบันทึกเป็น JPEG
 export async function compressImage(file, { maxDim = 1600, quality = 0.82 } = {}) {

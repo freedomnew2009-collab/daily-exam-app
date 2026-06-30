@@ -6,6 +6,7 @@ import { Spinner, Button, Empty, Badge, AutoTextarea, formatDuration } from '../
 import { AnswerInput, ReviewAnswer } from '../components/AnswerInput'
 import { encodeAnswer, hasAnswer } from '../lib/questions'
 import { playFinishSound } from '../lib/sound'
+import { preloadImages } from '../lib/image'
 
 export default function PreviewQuiz() {
   const { setId } = useParams()
@@ -36,7 +37,9 @@ export default function PreviewQuiz() {
       const mins = Math.max(1, Number(setting?.value) || 15)
       setTotalSeconds(mins * 60)
       setRemaining(mins * 60)
-      setQuestions(Array.isArray(qs) ? qs : [])
+      const list = Array.isArray(qs) ? qs : []
+      setQuestions(list)
+      preloadImages(list.map((q) => q.image_url))
       setLoading(false)
     })()
   }, [setId, isAdmin])

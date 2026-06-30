@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Spinner, Button, Empty, formatDuration } from '../components/ui'
 import { AnswerInput } from '../components/AnswerInput'
 import { encodeAnswer, hasAnswer } from '../lib/questions'
+import { preloadImages } from '../lib/image'
 
 export default function CategoryQuiz() {
   const { category } = useParams()
@@ -25,7 +26,9 @@ export default function CategoryQuiz() {
     ;(async () => {
       setLoading(true)
       const { data } = await supabase.rpc('get_category_quiz', { p_category: category })
-      setQuestions(Array.isArray(data) ? data : [])
+      const list = Array.isArray(data) ? data : []
+      setQuestions(list)
+      preloadImages(list.map((q) => q.image_url)) // โหลดรูปทุกข้อไว้ล่วงหน้า
       setLoading(false)
     })()
   }, [category])
