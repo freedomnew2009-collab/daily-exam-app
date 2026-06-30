@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import { supabase, isConfigured } from '../lib/supabase'
 import { getLastSeenArticles, setLastSeenArticles } from '../lib/notify'
 import { Spinner, Badge, Empty } from '../components/ui'
+import { playFinishSound } from '../lib/sound'
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('th-TH', {
@@ -15,10 +16,11 @@ function fmtDate(iso) {
 
 // ---------- รายการบทความ ----------
 export default function Articles({ onSeen }) {
-  const { isAdmin, logoutUser, adminSignOut } = useStore()
+  const { user, isAdmin, logoutUser, adminSignOut } = useStore()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [articles, setArticles] = useState([])
+  const [readIds, setReadIds] = useState(new Set())
   const [lastSeenAtLoad] = useState(getLastSeenArticles())
 
   const logoutAll = async () => {
@@ -32,18 +34,22 @@ export default function Articles({ onSeen }) {
       return
     }
     setLoading(true)
-    const { data } = await supabase
-      .from('articles')
-      .select('id, title, body, cover_url, images, views, created_at')
-      .eq('published', true)
-      .order('created_at', { ascending: false })
+    const [{ data }, { data: read }] = await Promise.all([
+      supabase
+        .from('articles')
+        .select('id, title, body, cover_url, images, views, created_at')
+        .eq('published', true)
+        .order('created_at', { ascending: false }),
+      supabase.rpc('get_read_articles', { p_user_id: user.id }),
+    ])
     setArticles(data || [])
+    setReadIds(new Set(Array.isArray(read) ? read : []))
     setLoading(false)
 
     // มาถึงหน้านี้ = เห็นบทความใหม่แล้ว
     setLastSeenArticles(new Date().toISOString())
     onSeen?.()
-  }, [onSeen])
+  }, [onSeen, user.id])
 
   useEffect(() => {
     load()
@@ -55,7 +61,11 @@ export default function Articles({ onSeen }) {
     <div className="px-4 pt-4">
       <header className="animate-rise mb-5 flex items-center justify-between rounded-3xl bg-gradient-to-r from-sky-500 to-violet-500 p-4 text-white shadow-lg shadow-sky-300/50">
         <div className="min-w-0">
-          <p className="text-xs text-white/80">ความรู้ดี ๆ จากแอดมิน</p>
+          <p className="text-xs text-white/80">
+            {articles.length > 0
+              ? `⭐ อ่านจบแล้ว ${articles.filter((a) => readIds.has(a.id)).length}/${articles.length} บทความ`
+              : 'ความรู้ดี ๆ จากแอดมิน'}
+          </p>
           <h1 className="text-lg font-extrabold">📰 บทความ</h1>
         </div>
         <button
@@ -76,12 +86,20 @@ export default function Articles({ onSeen }) {
         <div className="space-y-3 pb-4">
           {articles.map((a) => {
             const isNew = new Date(a.created_at) > new Date(lastSeenAtLoad)
+            const isRead = readIds.has(a.id)
             return (
               <button
                 key={a.id}
                 onClick={() => navigate(`/articles/${a.id}`)}
-                className="animate-rise block w-full overflow-hidden rounded-3xl border border-white bg-white/80 text-left shadow-lg shadow-violet-200/40 backdrop-blur"
+                className={`animate-rise relative block w-full overflow-hidden rounded-3xl border text-left shadow-lg shadow-violet-200/40 backdrop-blur ${
+                  isRead ? 'border-amber-200 bg-amber-50/70' : 'border-white bg-white/80'
+                }`}
               >
+                {isRead && (
+                  <span className="absolute right-2 top-2 z-10 rounded-full bg-amber-400 px-2 py-1 text-xs font-bold text-white shadow">
+                    ⭐ อ่านจบแล้ว
+                  </span>
+                )}
                 {a.cover_url && (
                   <img src={a.cover_url} alt="" className="h-36 w-full object-cover" loading="lazy" />
                 )}
@@ -109,19 +127,27 @@ export default function Articles({ onSeen }) {
 // ---------- อ่านบทความเต็ม ----------
 export function ArticleView() {
   const { id } = useParams()
+  const { user } = useStore()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [article, setArticle] = useState(null)
+  const [read, setRead] = useState(false) // อ่านจบแล้วหรือยัง
+  const [claiming, setClaiming] = useState(false)
+  const [reward, setReward] = useState(null) // { total } เมื่อเพิ่งรับดาว
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
-      const { data } = await supabase
-        .from('articles')
-        .select('id, title, body, cover_url, images, views, created_at')
-        .eq('id', id)
-        .maybeSingle()
+      const [{ data }, { data: readIds }] = await Promise.all([
+        supabase
+          .from('articles')
+          .select('id, title, body, cover_url, images, views, created_at')
+          .eq('id', id)
+          .maybeSingle(),
+        supabase.rpc('get_read_articles', { p_user_id: user.id }),
+      ])
       setArticle(data)
+      setRead(Array.isArray(readIds) && readIds.includes(id))
       setLoading(false)
       // นับยอดเข้าอ่าน +1 (ต้องมี .then ให้ supabase ยิง request จริง — ตัว builder เป็น lazy)
       if (data) {
@@ -131,7 +157,21 @@ export function ArticleView() {
         )
       }
     })()
-  }, [id])
+  }, [id, user.id])
+
+  const claimStar = async () => {
+    if (claiming || read) return
+    setClaiming(true)
+    const { data, error } = await supabase.rpc('mark_article_read', {
+      p_user_id: user.id,
+      p_article_id: id,
+    })
+    setClaiming(false)
+    if (error) return
+    setRead(true)
+    setReward({ total: data?.total_read ?? 1 })
+    playFinishSound(1)
+  }
 
   if (loading) return <Spinner />
   if (!article)
@@ -186,7 +226,55 @@ export function ArticleView() {
         </div>
       )}
 
-      <p className="mt-8 text-center text-sm text-slate-400">— จบบทความ — 🌟</p>
+      {/* รางวัลเมื่ออ่านจบ */}
+      <div className="mt-8 flex flex-col items-center">
+        {read ? (
+          <div className="flex flex-col items-center gap-1 rounded-2xl border-2 border-amber-200 bg-amber-50 px-6 py-4">
+            <span className="text-4xl">⭐</span>
+            <p className="font-bold text-amber-700">อ่านจบแล้ว — เก่งมาก!</p>
+          </div>
+        ) : (
+          <button
+            onClick={claimStar}
+            disabled={claiming}
+            className="animate-pop rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 px-6 py-3.5 text-base font-extrabold text-white shadow-lg shadow-amber-300/50 active:scale-95 disabled:opacity-60"
+          >
+            {claiming ? 'กำลังบันทึก…' : '📖 อ่านจบแล้ว — รับดาว ⭐'}
+          </button>
+        )}
+        <p className="mt-3 text-center text-sm text-slate-400">— จบบทความ — 🌟</p>
+      </div>
+
+      {/* ป๊อปอัปฉลองรับดาว (ครั้งแรก) */}
+      {reward && (
+        <div
+          onClick={() => setReward(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6 backdrop-blur-sm"
+        >
+          <div className="animate-pop relative max-w-xs rounded-3xl bg-white p-7 text-center shadow-2xl">
+            <div className="mb-1 flex justify-center gap-1 text-3xl">
+              <span className="animate-float">⭐</span>
+              <span className="animate-float text-5xl" style={{ animationDelay: '0.1s' }}>
+                🌟
+              </span>
+              <span className="animate-float" style={{ animationDelay: '0.2s' }}>
+                ⭐
+              </span>
+            </div>
+            <h2 className="text-xl font-extrabold text-violet-700">เก่งมาก! อ่านจบแล้ว 🎉</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              ได้รับดาวเพิ่ม 1 ดวง · อ่านจบไปแล้วทั้งหมด{' '}
+              <b className="text-amber-500">{reward.total}</b> บทความ
+            </p>
+            <button
+              onClick={() => setReward(null)}
+              className="mt-4 rounded-2xl bg-violet-500 px-6 py-2.5 font-bold text-white hover:bg-violet-600"
+            >
+              เยี่ยมไปเลย! 🙌
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
