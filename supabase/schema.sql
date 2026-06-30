@@ -412,11 +412,16 @@ create function submit_attempt(
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_attempt_id uuid; v_total int; v_score int := 0; rec jsonb; v_sel text; v_g jsonb; v_game jsonb;
+  v_attempt_id uuid; v_total int; v_score int := 0; rec jsonb; v_sel text; v_g jsonb; v_game jsonb; v_first boolean;
 begin
   if exists (select 1 from profiles where id = p_user_id and suspended) then
     raise exception 'suspended: บัญชีนี้ถูกระงับการใช้งาน';
   end if;
+
+  -- ครั้งแรกที่ทำชุดนี้ไหม (รางวัลให้เฉพาะครั้งแรก กันฟาร์มซ้ำ)
+  v_first := not exists (
+    select 1 from attempts where user_id = p_user_id and exam_set_id = p_exam_set_id and completed
+  );
 
   select coalesce(sum(question_points(q_type, choices)), 0) into v_total
     from questions where exam_set_id = p_exam_set_id;
@@ -436,7 +441,11 @@ begin
   end loop;
 
   update attempts set score = v_score where id = v_attempt_id;
-  v_game := register_activity(p_user_id, v_score); -- หยดน้ำ + streak + เป้าหมายรายวัน
+  if v_first then
+    v_game := register_activity(p_user_id, v_score); -- หยดน้ำ + streak + เป้าหมาย เฉพาะครั้งแรก
+  else
+    v_game := jsonb_build_object('repeat', true);
+  end if;
   return jsonb_build_object('attempt_id', v_attempt_id, 'score', v_score, 'total', v_total, 'game', v_game);
 end;
 $$;
@@ -915,11 +924,15 @@ create or replace function submit_category_attempt(
   p_user_id uuid, p_category text, p_answers jsonb, p_duration int default 0
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_attempt_id uuid; v_total int := 0; v_score int := 0; rec jsonb; v_sel text; v_g jsonb; v_game jsonb;
+declare v_attempt_id uuid; v_total int := 0; v_score int := 0; rec jsonb; v_sel text; v_g jsonb; v_game jsonb; v_first boolean;
 begin
   if exists (select 1 from profiles where id = p_user_id and suspended) then
     raise exception 'suspended: บัญชีนี้ถูกระงับการใช้งาน';
   end if;
+
+  -- ครั้งแรกที่ทำหมวดนี้ไหม (รางวัลให้เฉพาะครั้งแรก)
+  v_first := not exists (select 1 from category_attempts where user_id = p_user_id and category = p_category);
+
   insert into category_attempts(user_id, category, score, total, duration_seconds)
   values (p_user_id, p_category, 0, 0, greatest(0, coalesce(p_duration, 0)))
   returning id into v_attempt_id;
@@ -934,7 +947,11 @@ begin
   end loop;
 
   update category_attempts set score = v_score, total = v_total where id = v_attempt_id;
-  v_game := register_activity(p_user_id, v_score); -- หยดน้ำ + streak + เป้าหมายรายวัน
+  if v_first then
+    v_game := register_activity(p_user_id, v_score);
+  else
+    v_game := jsonb_build_object('repeat', true);
+  end if;
   return jsonb_build_object('attempt_id', v_attempt_id, 'score', v_score, 'total', v_total, 'game', v_game);
 end;
 $$;

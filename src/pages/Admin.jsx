@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
@@ -6,7 +6,49 @@ import { compressImage } from '../lib/image'
 import { Button, Card, Badge, Spinner, AutoTextarea, BigTextField, formatDuration } from '../components/ui'
 import { Q_TYPES, fillAccepts } from '../lib/questions'
 
+const Tree3D = lazy(() => import('../components/Tree3D'))
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
+
+// แอดมินดูรูปต้นไม้ทุกระดับ (ที่ผู้ใช้ต้องปลดล็อก)
+function TreeLevelsPreview() {
+  const [lv, setLv] = useState(1)
+  return (
+    <Card className="space-y-3">
+      <p className="text-sm text-slate-600">
+        เลื่อนดูรูปต้นไม้ทุกระดับ — ผู้ใช้จะเห็นเป็นเงาดำจนกว่าจะปลดล็อก (รดน้ำให้ถึงเลเวลนั้น)
+      </p>
+      <div className="relative h-64 overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-b from-sky-200 via-sky-100 to-emerald-50">
+        <Suspense fallback={<div className="flex h-full items-center justify-center text-5xl">🌳</div>}>
+          <Tree3D level={lv} />
+        </Suspense>
+        <span className="absolute left-3 top-3 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-emerald-700 shadow">
+          เลเวล {lv}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={1}
+        max={12}
+        value={lv}
+        onChange={(e) => setLv(Number(e.target.value))}
+        className="w-full accent-emerald-500"
+      />
+      <div className="flex flex-wrap gap-1.5">
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+          <button
+            key={n}
+            onClick={() => setLv(n)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
+              lv === n ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Lv {n}
+          </button>
+        ))}
+      </div>
+    </Card>
+  )
+}
 
 function blankQuestion() {
   return {
@@ -1451,6 +1493,7 @@ const ADMIN_SECTIONS = [
   { id: 'exams', label: '📝 ข้อสอบ' },
   { id: 'results', label: '📊 ผลตรวจ' },
   { id: 'stats', label: '📈 สรุป & กราฟ' },
+  { id: 'tree', label: '🌳 ดูต้นไม้ทุกระดับ' },
   { id: 'categories', label: '🏷️ หมวดข้อสอบ' },
   { id: 'time', label: '⏱ เวลาทำข้อสอบ' },
   { id: 'encourage', label: '💛 ข้อความให้กำลังใจ' },
@@ -2011,6 +2054,13 @@ export default function Admin() {
         <>
       <h2 className="mb-2 text-base font-bold text-slate-700">📈 สรุป &amp; กราฟ</h2>
       <StatsPanel sets={sets} />
+        </>
+      )}
+
+      {section === 'tree' && (
+        <>
+      <h2 className="mb-2 text-base font-bold text-slate-700">🌳 ดูต้นไม้ทุกระดับ</h2>
+      <TreeLevelsPreview />
         </>
       )}
 

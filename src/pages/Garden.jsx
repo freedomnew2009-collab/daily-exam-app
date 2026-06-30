@@ -13,6 +13,10 @@ const LEVEL_NAMES = [
 ]
 const levelName = (lv) => LEVEL_NAMES[Math.min(lv - 1, LEVEL_NAMES.length - 1)]
 
+const MAX_TREE_LEVEL = 12 // จำนวนฟอร์มต้นไม้ในคอลเลกชัน
+const levelEmoji = (lv) =>
+  lv <= 1 ? '🌱' : lv <= 2 ? '🌿' : lv <= 3 ? '🪴' : lv <= 5 ? '🌳' : lv <= 7 ? '🌸' : lv <= 9 ? '🍎' : '🌲'
+
 // แคตตาล็อก Achievement — คำนวณจาก get_game_stats
 const ACHIEVEMENTS = [
   { icon: '🌱', title: 'ก้าวแรก', desc: 'ทำข้อสอบครั้งแรก', need: 1, get: (s) => s.exams_done },
@@ -36,6 +40,7 @@ export default function Garden() {
   const [loading, setLoading] = useState(true)
   const [watering, setWatering] = useState(false)
   const [celebrate, setCelebrate] = useState(null) // { level }
+  const [preview, setPreview] = useState(null) // ดูฟอร์มเลเวลอื่นที่ปลดล็อกแล้ว
 
   useEffect(() => {
     ;(async () => {
@@ -60,6 +65,7 @@ export default function Garden() {
     setWatering(false)
     if (error || !data) return
     setG(data)
+    setPreview(null)
     if ((data.leveled_up || 0) > 0) {
       setCelebrate({ level: data.level })
       playFinishSound(1)
@@ -73,6 +79,7 @@ export default function Garden() {
   const per = g?.per_level ?? 5
   const drops = g?.drops ?? 0
   const pct = Math.round((inLv / per) * 100)
+  const displayLevel = preview ?? lv // ฟอร์มที่กำลังโชว์ในเวที 3D
 
   return (
     <div className="px-4 pt-4 pb-6">
@@ -94,14 +101,69 @@ export default function Garden() {
             <div className="flex h-full items-center justify-center text-6xl">🌳</div>
           }
         >
-          <Tree3D level={lv} />
+          <Tree3D level={displayLevel} />
         </Suspense>
         <span className="absolute left-3 top-3 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-emerald-700 shadow">
-          {levelName(lv)}
+          {levelName(displayLevel)}
+          {preview && preview !== lv && <span className="text-slate-400"> · พรีวิว Lv{preview}</span>}
         </span>
         <span className="absolute bottom-3 right-3 rounded-full bg-white/70 px-2 py-1 text-[10px] font-semibold text-slate-500 shadow">
           🔄 ต้นไม้หมุนได้
         </span>
+        {preview && preview !== lv && (
+          <button
+            onClick={() => setPreview(null)}
+            className="absolute bottom-3 left-3 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-bold text-white shadow"
+          >
+            ↩ ดูต้นปัจจุบัน
+          </button>
+        )}
+      </div>
+
+      {/* คอลเลกชันฟอร์มต้นไม้ (ปลดล็อกตามเลเวล · ที่ยังไม่ถึงเป็นเงาดำ) */}
+      <div className="mt-4">
+        <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-slate-700">
+          <span className="text-xl">🪴</span> คอลเลกชันต้นไม้
+          <span className="text-xs font-normal text-slate-400">
+            (ปลดล็อก {Math.min(lv, MAX_TREE_LEVEL)}/{MAX_TREE_LEVEL})
+          </span>
+        </h2>
+        <div className="grid grid-cols-4 gap-2">
+          {Array.from({ length: MAX_TREE_LEVEL }, (_, i) => i + 1).map((tl) => {
+            const unlocked = tl <= lv
+            const active = displayLevel === tl
+            return (
+              <button
+                key={tl}
+                onClick={() => unlocked && setPreview(tl)}
+                disabled={!unlocked}
+                className={`relative flex aspect-square flex-col items-center justify-center rounded-2xl border-2 transition ${
+                  active
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : unlocked
+                      ? 'border-emerald-100 bg-white active:bg-emerald-50'
+                      : 'border-slate-200 bg-slate-800/90'
+                }`}
+                title={unlocked ? `ฟอร์มเลเวล ${tl}` : 'ยังไม่ปลดล็อก — รดน้ำต้นไม้ให้ถึงเลเวลนี้'}
+              >
+                {unlocked ? (
+                  <>
+                    <span className="text-2xl">{levelEmoji(tl)}</span>
+                    <span className="mt-0.5 text-[10px] font-bold text-emerald-600">Lv {tl}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xl text-white/70">🔒</span>
+                    <span className="mt-0.5 text-[10px] font-bold text-white/40">Lv {tl}</span>
+                  </>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-1.5 text-center text-xs text-slate-400">
+          แตะดูฟอร์มที่ปลดล็อกแล้ว · ช่องดำคือฟอร์มลับ ปลดล็อกด้วยการรดน้ำให้ถึงเลเวลนั้น ✨
+        </p>
       </div>
 
       {/* ความคืบหน้าสู่เลเวลถัดไป */}
