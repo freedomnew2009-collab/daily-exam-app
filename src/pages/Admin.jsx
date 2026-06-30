@@ -870,6 +870,16 @@ function ExamResults({ sets }) {
     setLoaded(true)
   }
 
+  const removeAttempt = async (a) => {
+    if (!confirm(`ลบผลของ "${a.username}" (${a.score}/${a.total}) ครั้งนี้?`)) return
+    const { error } = await supabase.rpc('delete_attempt', { p_attempt_id: a.attempt_id })
+    if (error) {
+      alert('ลบไม่สำเร็จ: ' + error.message)
+      return
+    }
+    setItems((prev) => prev.filter((x) => x.attempt_id !== a.attempt_id))
+  }
+
   return (
     <Card className="space-y-3">
       <select
@@ -899,28 +909,37 @@ function ExamResults({ sets }) {
           const open = openId === a.attempt_id
           return (
             <div key={a.attempt_id} className="overflow-hidden rounded-xl border border-violet-100 bg-white">
-              <button
-                onClick={() => setOpenId(open ? null : a.attempt_id)}
-                className="flex w-full items-center justify-between gap-2 p-3 text-left"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-bold text-slate-800">{a.username}</p>
-                  <p className="text-xs text-slate-400">
-                    {new Date(a.created_at).toLocaleString('th-TH')}
-                  </p>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-2">
-                  {a.duration_seconds > 0 && (
-                    <span className="text-xs text-slate-400 tabular-nums">
-                      ⏱ {formatDuration(a.duration_seconds)}
-                    </span>
-                  )}
-                  <Badge color={a.score === a.total ? 'green' : 'amber'}>
-                    {a.score}/{a.total}
-                  </Badge>
-                  <span className="text-xs text-slate-300">{open ? '▲' : '▼'}</span>
-                </div>
-              </button>
+              <div className="flex items-center">
+                <button
+                  onClick={() => setOpenId(open ? null : a.attempt_id)}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 p-3 text-left"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-800">{a.username}</p>
+                    <p className="text-xs text-slate-400">
+                      {new Date(a.created_at).toLocaleString('th-TH')}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {a.duration_seconds > 0 && (
+                      <span className="text-xs text-slate-400 tabular-nums">
+                        ⏱ {formatDuration(a.duration_seconds)}
+                      </span>
+                    )}
+                    <Badge color={a.score === a.total ? 'green' : 'amber'}>
+                      {a.score}/{a.total}
+                    </Badge>
+                    <span className="text-xs text-slate-300">{open ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => removeAttempt(a)}
+                  className="flex-shrink-0 px-3 py-3 text-rose-400 hover:text-rose-600"
+                  title="ลบผลครั้งนี้"
+                >
+                  🗑
+                </button>
+              </div>
 
               {open && (
                 <div className="space-y-2 border-t border-violet-100 bg-violet-50/40 p-3">
@@ -953,6 +972,218 @@ function ExamResults({ sets }) {
         })}
       </div>
     </Card>
+  )
+}
+
+// สีตามเปอร์เซ็นต์คะแนน (แดง 0% -> เหลือง -> เขียว 100%)
+const pctText = (pct) => `hsl(${Math.round((pct / 100) * 120)}, 65%, 38%)`
+const pctBg = (pct) => `hsl(${Math.round((pct / 100) * 120)}, 70%, 92%)`
+
+// 📈 สรุป & กราฟ (เฉพาะแอดมิน)
+function StatsPanel({ sets }) {
+  const [matrix, setMatrix] = useState(null) // { users, sets, cells }
+  const [loading, setLoading] = useState(true)
+  const [personId, setPersonId] = useState('')
+  const [qSetId, setQSetId] = useState('')
+  const [qStats, setQStats] = useState(null)
+  const [qLoading, setQLoading] = useState(false)
+
+  useEffect(() => {
+    ;(async () => {
+      setLoading(true)
+      const { data } = await supabase.rpc('get_score_matrix')
+      setMatrix(data || { users: [], sets: [], cells: [] })
+      setLoading(false)
+    })()
+  }, [])
+
+  const loadQStats = async (id) => {
+    setQSetId(id)
+    setQStats(null)
+    if (!id) return
+    setQLoading(true)
+    const { data } = await supabase.rpc('get_question_stats', { p_exam_set_id: id })
+    setQStats(data?.items || [])
+    setQLoading(false)
+  }
+
+  if (loading)
+    return (
+      <Card>
+        <Spinner label="กำลังโหลดสถิติ…" />
+      </Card>
+    )
+
+  const { users = [], sets: aSets = [], cells = [] } = matrix || {}
+  const cellMap = {}
+  for (const c of cells) cellMap[`${c.user_id}|${c.exam_set_id}`] = c
+  const cellPct = (c, s) => {
+    const total = c.best_total || s.total || 0
+    return total ? Math.round((100 * c.best) / total) : 0
+  }
+
+  const person = users.find((u) => u.id === personId)
+  const personRows = person
+    ? aSets.map((s) => ({ s, c: cellMap[`${person.id}|${s.id}`] })).filter((r) => r.c)
+    : []
+  const answeredStats = (qStats || []).filter((q) => q.answered > 0)
+
+  return (
+    <div className="space-y-5">
+      {/* ===== Heatmap: คน x ชุด ===== */}
+      <Card className="space-y-2">
+        <h3 className="text-sm font-bold text-slate-700">🗺️ ตารางคะแนน (ทุกคน × ทุกชุด)</h3>
+        {users.length === 0 ? (
+          <p className="py-3 text-center text-sm text-slate-400">ยังไม่มีใครทำข้อสอบ</p>
+        ) : (
+          <>
+            <p className="text-xs text-slate-400">
+              แถว = ชุดข้อสอบ · คอลัมน์ = ผู้ทำ · ตัวเลข = คะแนนสูงสุด (เลื่อนซ้าย-ขวาได้)
+            </p>
+            <div className="overflow-x-auto pb-1">
+              <table className="border-separate" style={{ borderSpacing: '4px' }}>
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 z-10 bg-white px-1 text-left text-[11px] font-bold text-slate-400">
+                      ชุด \ คน
+                    </th>
+                    {users.map((u) => (
+                      <th
+                        key={u.id}
+                        className="max-w-[72px] truncate px-1 text-[11px] font-bold text-slate-500"
+                        title={u.username}
+                      >
+                        {u.username}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {aSets.map((s) => (
+                    <tr key={s.id}>
+                      <td
+                        className="sticky left-0 z-10 max-w-[120px] truncate bg-white px-1 text-[11px] font-semibold text-slate-600"
+                        title={s.title}
+                      >
+                        {s.title || 'ชุด'}
+                      </td>
+                      {users.map((u) => {
+                        const c = cellMap[`${u.id}|${s.id}`]
+                        if (!c)
+                          return (
+                            <td key={u.id} className="text-center text-xs text-slate-300">
+                              –
+                            </td>
+                          )
+                        const total = c.best_total || s.total || 0
+                        const pct = cellPct(c, s)
+                        return (
+                          <td
+                            key={u.id}
+                            className="rounded-md px-2 py-1 text-center text-[11px] font-bold tabular-nums"
+                            style={{ background: pctBg(pct), color: pctText(pct) }}
+                            title={`${u.username} · ${s.title}: ${c.best}/${total} (${pct}%) · ${c.attempts} ครั้ง`}
+                          >
+                            {c.best}/{total}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* ===== กราฟรายคน ===== */}
+      <Card className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-700">👤 คะแนนรายคน (แต่ละชุด)</h3>
+        <select
+          value={personId}
+          onChange={(e) => setPersonId(e.target.value)}
+          className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+        >
+          <option value="">— เลือกผู้ใช้ —</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.username}
+            </option>
+          ))}
+        </select>
+        {person && personRows.length === 0 && (
+          <p className="py-2 text-center text-sm text-slate-400">ยังไม่เคยทำข้อสอบ</p>
+        )}
+        {personRows.length > 0 && (
+          <div className="space-y-2.5">
+            {personRows.map(({ s, c }) => {
+              const total = c.best_total || s.total || 0
+              const pct = cellPct(c, s)
+              return (
+                <div key={s.id}>
+                  <div className="mb-0.5 flex items-center justify-between gap-2 text-xs">
+                    <span className="min-w-0 truncate font-semibold text-slate-600">{s.title || 'ชุด'}</span>
+                    <span className="flex-shrink-0 font-bold tabular-nums" style={{ color: pctText(pct) }}>
+                      {c.best}/{total} ({pct}%)
+                    </span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, background: pctText(pct) }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* ===== ข้อที่ตอบผิดเยอะสุด ===== */}
+      <Card className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-700">❌ ข้อที่คนตอบผิดมากสุด (รายชุด)</h3>
+        <select
+          value={qSetId}
+          onChange={(e) => loadQStats(e.target.value)}
+          className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-violet-400"
+        >
+          <option value="">— เลือกชุดข้อสอบ —</option>
+          {sets.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.title || 'ชุดข้อสอบ'} ({s.question_count} ข้อ)
+            </option>
+          ))}
+        </select>
+        {qLoading && <Spinner label="กำลังคำนวณ…" />}
+        {qStats && !qLoading && answeredStats.length === 0 && (
+          <p className="py-2 text-center text-sm text-slate-400">ยังไม่มีใครทำชุดนี้</p>
+        )}
+        {answeredStats.length > 0 && (
+          <div className="space-y-2.5">
+            {answeredStats.map((q, i) => (
+              <div key={q.question_id}>
+                <div className="mb-0.5 flex items-start justify-between gap-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-600">
+                    {i === 0 && q.wrong > 0 && '🔴 '}ข้อ {q.order_index + 1}. {q.question_text}
+                  </span>
+                  <span className="flex-shrink-0 font-bold tabular-nums text-rose-500">
+                    {q.wrong_pct}% ({q.wrong}/{q.answered})
+                  </span>
+                </div>
+                <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-rose-400 transition-all"
+                    style={{ width: `${q.wrong_pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
   )
 }
 
@@ -1214,6 +1445,7 @@ function ArticlesAdmin() {
 const ADMIN_SECTIONS = [
   { id: 'exams', label: '📝 ข้อสอบ' },
   { id: 'results', label: '📊 ผลตรวจ' },
+  { id: 'stats', label: '📈 สรุป & กราฟ' },
   { id: 'categories', label: '🏷️ หมวดข้อสอบ' },
   { id: 'time', label: '⏱ เวลาทำข้อสอบ' },
   { id: 'encourage', label: '💛 ข้อความให้กำลังใจ' },
@@ -1762,6 +1994,13 @@ export default function Admin() {
       {/* ผลตรวจ + เหตุผลผู้ตอบ */}
       <h2 className="mb-2 text-base font-bold text-slate-700">📊 ผลตรวจ &amp; เหตุผลผู้ตอบ</h2>
       <ExamResults sets={sets} />
+        </>
+      )}
+
+      {section === 'stats' && (
+        <>
+      <h2 className="mb-2 text-base font-bold text-slate-700">📈 สรุป &amp; กราฟ</h2>
+      <StatsPanel sets={sets} />
         </>
       )}
 

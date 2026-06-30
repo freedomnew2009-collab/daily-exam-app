@@ -89,7 +89,9 @@ export default function Articles({ onSeen }) {
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     {isNew && <Badge color="red">✨ ใหม่</Badge>}
                     <span className="text-xs text-slate-400">{fmtDate(a.created_at)}</span>
-                    <span className="text-xs text-slate-400">· 👁 {a.views ?? 0} ครั้ง</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-500">
+                      👁 {a.views ?? 0} ครั้ง
+                    </span>
                   </div>
                   <p className="font-bold leading-snug text-slate-800">{a.title}</p>
                   <p className="mt-1 line-clamp-2 text-sm text-slate-500">{a.body}</p>
