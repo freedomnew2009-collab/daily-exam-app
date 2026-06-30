@@ -21,6 +21,7 @@ export default function Articles({ onSeen }) {
   const [loading, setLoading] = useState(true)
   const [articles, setArticles] = useState([])
   const [readIds, setReadIds] = useState(new Set())
+  const [stats, setStats] = useState({}) // articleId -> { viewers, stars }
   const [lastSeenAtLoad] = useState(getLastSeenArticles())
 
   const logoutAll = async () => {
@@ -34,16 +35,18 @@ export default function Articles({ onSeen }) {
       return
     }
     setLoading(true)
-    const [{ data }, { data: read }] = await Promise.all([
+    const [{ data }, { data: read }, { data: statData }] = await Promise.all([
       supabase
         .from('articles')
-        .select('id, title, body, cover_url, images, views, created_at')
+        .select('id, title, body, cover_url, images, created_at')
         .eq('published', true)
         .order('created_at', { ascending: false }),
       supabase.rpc('get_read_articles', { p_user_id: user.id }),
+      supabase.rpc('get_article_stats'),
     ])
     setArticles(data || [])
     setReadIds(new Set(Array.isArray(read) ? read : []))
+    setStats(statData && typeof statData === 'object' ? statData : {})
     setLoading(false)
 
     // มาถึงหน้านี้ = เห็นบทความใหม่แล้ว
@@ -108,7 +111,10 @@ export default function Articles({ onSeen }) {
                     {isNew && <Badge color="red">✨ ใหม่</Badge>}
                     <span className="text-xs text-slate-400">{fmtDate(a.created_at)}</span>
                     <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-500">
-                      👁 {a.views ?? 0} ครั้ง
+                      👤 {stats[a.id]?.viewers ?? 0} คน
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-500">
+                      ⭐ {stats[a.id]?.stars ?? 0}
                     </span>
                   </div>
                   <p className="font-bold leading-snug text-slate-800">{a.title}</p>
@@ -134,28 +140,29 @@ export function ArticleView() {
   const [read, setRead] = useState(false) // อ่านจบแล้วหรือยัง
   const [claiming, setClaiming] = useState(false)
   const [reward, setReward] = useState(null) // { total } เมื่อเพิ่งรับดาว
+  const [stat, setStat] = useState({ viewers: 0, stars: 0 })
 
   useEffect(() => {
     ;(async () => {
       setLoading(true)
-      const [{ data }, { data: readIds }] = await Promise.all([
+      // นับผู้เข้าอ่าน (ไม่ซ้ำคน) ก่อน แล้วค่อยดึงสถิติให้รวมตัวเราด้วย
+      await supabase.rpc('mark_article_view', { p_user_id: user.id, p_article_id: id }).then(
+        () => {},
+        () => {}
+      )
+      const [{ data }, { data: readIds }, { data: statData }] = await Promise.all([
         supabase
           .from('articles')
-          .select('id, title, body, cover_url, images, views, created_at')
+          .select('id, title, body, cover_url, images, created_at')
           .eq('id', id)
           .maybeSingle(),
         supabase.rpc('get_read_articles', { p_user_id: user.id }),
+        supabase.rpc('get_article_stats'),
       ])
       setArticle(data)
       setRead(Array.isArray(readIds) && readIds.includes(id))
+      setStat(statData?.[id] || { viewers: 0, stars: 0 })
       setLoading(false)
-      // นับยอดเข้าอ่าน +1 (ต้องมี .then ให้ supabase ยิง request จริง — ตัว builder เป็น lazy)
-      if (data) {
-        supabase.rpc('increment_article_views', { p_id: id }).then(
-          () => {},
-          () => {}
-        )
-      }
     })()
   }, [id, user.id])
 
@@ -169,6 +176,7 @@ export function ArticleView() {
     setClaiming(false)
     if (error) return
     setRead(true)
+    setStat((s) => ({ ...s, stars: (s.stars || 0) + 1 }))
     setReward({ total: data?.total_read ?? 1 })
     playFinishSound(1)
   }
@@ -201,9 +209,14 @@ export function ArticleView() {
         />
       )}
 
-      <div className="flex items-center gap-2 text-xs text-slate-400">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>{fmtDate(article.created_at)}</span>
-        <span>· 👁 {(article.views ?? 0) + 1} ครั้ง</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 font-semibold text-violet-500">
+          👤 {stat.viewers ?? 0} คนอ่าน
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-500">
+          ⭐ {stat.stars ?? 0} ดาว
+        </span>
       </div>
       <h1 className="mt-1 text-2xl font-extrabold leading-snug text-slate-800">{article.title}</h1>
 

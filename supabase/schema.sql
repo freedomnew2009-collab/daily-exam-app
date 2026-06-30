@@ -1160,6 +1160,47 @@ end;
 $$;
 grant execute on function get_read_articles(uuid) to anon, authenticated;
 
+-- ===== นับ "ผู้เข้าอ่าน" แบบไม่ซ้ำคน (1 user/บทความ นับ 1) =====
+create table if not exists article_views (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  article_id uuid not null references articles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (user_id, article_id)
+);
+alter table article_views enable row level security;
+create index if not exists idx_article_views_article on article_views(article_id);
+
+-- บันทึกว่า user เข้าดูบทความ (ไม่ซ้ำ)
+create or replace function mark_article_view(p_user_id uuid, p_article_id uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into article_views(user_id, article_id) values (p_user_id, p_article_id)
+  on conflict (user_id, article_id) do nothing;
+end;
+$$;
+grant execute on function mark_article_view(uuid, uuid) to anon, authenticated;
+
+-- สถิติต่อบทความ: viewers = จำนวนผู้เข้าอ่าน (ไม่ซ้ำ), stars = จำนวนดาวที่กดเก็บ (อ่านจบ)
+create or replace function get_article_stats()
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  return coalesce((
+    select jsonb_object_agg(article_id, info)
+    from (
+      select a.id as article_id, jsonb_build_object(
+          'viewers', (select count(*) from article_views v where v.article_id = a.id),
+          'stars', (select count(*) from article_reads r where r.article_id = a.id)
+        ) as info
+      from articles a
+    ) s
+  ), '{}'::jsonb);
+end;
+$$;
+grant execute on function get_article_stats() to anon, authenticated;
+
 -- ---------- ที่เก็บรูปคำถาม (Supabase Storage) ----------
 insert into storage.buckets (id, name, public)
 values ('question-images', 'question-images', true)

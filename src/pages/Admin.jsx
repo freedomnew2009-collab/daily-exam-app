@@ -1200,13 +1200,18 @@ function ArticlesAdmin() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
 
+  const [stats, setStats] = useState({})
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('articles')
-      .select('id, title, body, cover_url, images, views, published, created_at')
-      .order('created_at', { ascending: false })
+    const [{ data }, { data: statData }] = await Promise.all([
+      supabase
+        .from('articles')
+        .select('id, title, body, cover_url, images, published, created_at')
+        .order('created_at', { ascending: false }),
+      supabase.rpc('get_article_stats'),
+    ])
     setList(data || [])
+    setStats(statData && typeof statData === 'object' ? statData : {})
     setLoading(false)
   }, [])
 
@@ -1410,7 +1415,7 @@ function ArticlesAdmin() {
                   ) : (
                     <span className="font-semibold text-amber-600">ฉบับร่าง</span>
                   )}{' '}
-                  · 👁 {a.views ?? 0} ครั้ง · {new Date(a.created_at).toLocaleDateString('th-TH')}
+                  · 👤 {stats[a.id]?.viewers ?? 0} คน · ⭐ {stats[a.id]?.stars ?? 0} · {new Date(a.created_at).toLocaleDateString('th-TH')}
                 </p>
               </div>
               <div className="flex flex-shrink-0 gap-1">
