@@ -121,8 +121,13 @@ export function ArticleView() {
         .maybeSingle()
       setArticle(data)
       setLoading(false)
-      // นับยอดเข้าอ่าน +1
-      if (data) supabase.rpc('increment_article_views', { p_id: id })
+      // นับยอดเข้าอ่าน +1 (ต้องมี .then ให้ supabase ยิง request จริง — ตัว builder เป็น lazy)
+      if (data) {
+        supabase.rpc('increment_article_views', { p_id: id }).then(
+          () => {},
+          () => {}
+        )
+      }
     })()
   }, [id])
 

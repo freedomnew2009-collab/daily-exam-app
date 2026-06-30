@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase, isConfigured } from '../lib/supabase'
-import { getLastSeen, setLastSeen } from '../lib/notify'
+import { getLastSeen, setLastSeen, getLastSeenArticles } from '../lib/notify'
 import { Spinner, Button, Card, Badge, Empty } from '../components/ui'
 
 function greeting() {
@@ -24,6 +24,7 @@ export default function Home({ onSeen }) {
   const [sets, setSets] = useState([])
   const [attempts, setAttempts] = useState({}) // setId -> { count, best }
   const [lastSeenAtLoad] = useState(getLastSeen())
+  const [newArticles, setNewArticles] = useState(0) // จำนวนบทความใหม่ที่ยังไม่ได้อ่าน
 
   const load = useCallback(async () => {
     if (!isConfigured) {
@@ -31,7 +32,8 @@ export default function Home({ onSeen }) {
       return
     }
     setLoading(true)
-    const [{ data: setsData }, { data: attemptData }] = await Promise.all([
+    const lastSeenArticles = getLastSeenArticles()
+    const [{ data: setsData }, { data: attemptData }, { count: newArticleCount }] = await Promise.all([
       supabase
         .from('exam_sets')
         .select('id, day_number, title, created_at, question_count')
@@ -42,7 +44,13 @@ export default function Home({ onSeen }) {
         .select('exam_set_id, score, total, completed')
         .eq('user_id', user.id)
         .eq('completed', true),
+      supabase
+        .from('articles')
+        .select('id', { count: 'exact', head: true })
+        .eq('published', true)
+        .gt('created_at', lastSeenArticles),
     ])
+    setNewArticles(newArticleCount || 0)
 
     const map = {}
     for (const a of attemptData || []) {
@@ -84,6 +92,21 @@ export default function Home({ onSeen }) {
           ↩ ออก
         </button>
       </header>
+
+      {/* แจ้งเตือนบทความใหม่ */}
+      {newArticles > 0 && (
+        <button
+          onClick={() => navigate('/articles')}
+          className="animate-rise mb-4 flex w-full items-center gap-3 rounded-2xl border-2 border-amber-200 bg-amber-50 p-3 text-left shadow-sm active:bg-amber-100"
+        >
+          <span className="text-2xl">📰</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-amber-800">มีบทความใหม่ {newArticles} รายการ</span>
+            <span className="block text-xs text-amber-600">แตะเพื่ออ่านความรู้ใหม่ ๆ กันเลย</span>
+          </span>
+          <span className="flex-shrink-0 text-amber-400">›</span>
+        </button>
+      )}
 
       <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
         <span className="text-xl">🗂️</span> ชุดข้อสอบของวันนี้
