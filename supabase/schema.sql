@@ -10,8 +10,10 @@ create table if not exists profiles (
   id uuid primary key default gen_random_uuid(),
   username text unique not null,
   suspended boolean not null default false, -- แอดมินกดระงับได้
+  exclude_stats boolean not null default false, -- ไม่นับในสถิติ/กราฟ (บัญชีทดสอบ/แอดมิน)
   created_at timestamptz not null default now()
 );
+alter table profiles add column if not exists exclude_stats boolean not null default false;
 -- เผื่อ DB เดิมที่สร้างก่อนมีคอลัมน์นี้
 alter table profiles add column if not exists suspended boolean not null default false;
 
@@ -564,6 +566,7 @@ begin
     from attempts a
     join profiles p on p.id = a.user_id
     where a.exam_set_id = p_exam_set_id and a.completed = true
+      and not coalesce(p.exclude_stats, false)
   ) sub;
 
   return jsonb_build_object('items', coalesce(v_items, '[]'::jsonb));
@@ -647,7 +650,8 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object('id', id, 'username', username) order by username), '[]'::jsonb)
     into v_users
   from profiles p
-  where exists (select 1 from attempts a where a.user_id = p.id and a.completed);
+  where not coalesce(p.exclude_stats, false)
+    and exists (select 1 from attempts a where a.user_id = p.id and a.completed);
 
   select coalesce(jsonb_agg(jsonb_build_object(
       'id', s.id, 'title', s.title, 'day_number', s.day_number,
@@ -655,18 +659,22 @@ begin
     ) order by s.day_number), '[]'::jsonb)
     into v_sets
   from exam_sets s
-  where exists (select 1 from attempts a where a.exam_set_id = s.id and a.completed);
+  where exists (
+    select 1 from attempts a join profiles pr on pr.id = a.user_id
+    where a.exam_set_id = s.id and a.completed and not coalesce(pr.exclude_stats, false)
+  );
 
   select coalesce(jsonb_agg(jsonb_build_object(
       'user_id', user_id, 'exam_set_id', exam_set_id,
       'best', best, 'best_total', best_total, 'attempts', cnt, 'last_at', last_at)), '[]'::jsonb)
     into v_cells
   from (
-    select user_id, exam_set_id, max(score) as best,
-           (array_agg(total order by score desc, created_at desc))[1] as best_total,
-           count(*) as cnt, max(created_at) as last_at
-    from attempts where completed
-    group by user_id, exam_set_id
+    select a.user_id, a.exam_set_id, max(a.score) as best,
+           (array_agg(a.total order by a.score desc, a.created_at desc))[1] as best_total,
+           count(*) as cnt, max(a.created_at) as last_at
+    from attempts a join profiles p on p.id = a.user_id
+    where a.completed and not coalesce(p.exclude_stats, false)
+    group by a.user_id, a.exam_set_id
   ) t;
 
   return jsonb_build_object('users', v_users, 'sets', v_sets, 'cells', v_cells);
@@ -691,8 +699,10 @@ begin
   into v_items
   from questions q
   left join (
-    select question_id, count(*) as answered, count(*) filter (where not is_correct) as wrong
-    from answers group by question_id
+    select an.question_id, count(*) as answered, count(*) filter (where not an.is_correct) as wrong
+    from answers an join profiles p on p.id = an.user_id
+    where not coalesce(p.exclude_stats, false)
+    group by an.question_id
   ) st on st.question_id = q.id
   where q.exam_set_id = p_exam_set_id;
   return jsonb_build_object('items', coalesce(v_items, '[]'::jsonb));

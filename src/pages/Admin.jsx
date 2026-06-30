@@ -1587,7 +1587,7 @@ export default function Admin() {
           .eq('is_public', false),
         supabase
           .from('profiles')
-          .select('id, username, suspended, created_at')
+          .select('id, username, suspended, exclude_stats, created_at')
           .order('created_at', { ascending: true }),
         supabase.from('app_settings').select('value').eq('key', 'categories').maybeSingle(),
       ])
@@ -1610,6 +1610,11 @@ export default function Admin() {
     if (!confirm(`${action}ผู้ใช้ "${u.username}"?`)) return
     await supabase.from('profiles').update({ suspended: !u.suspended }).eq('id', u.id)
     load()
+  }
+
+  const toggleExclude = async (u) => {
+    await supabase.from('profiles').update({ exclude_stats: !u.exclude_stats }).eq('id', u.id)
+    setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, exclude_stats: !x.exclude_stats } : x)))
   }
 
   useEffect(() => {
@@ -2063,25 +2068,38 @@ export default function Admin() {
       ) : (
         <div className="space-y-2">
           {users.map((u) => (
-            <Card key={u.id} className="flex items-center justify-between">
-              <div className="min-w-0">
-                <p className="truncate font-bold text-slate-800">
-                  {u.username}{' '}
-                  {u.suspended && <Badge color="red">ถูกระงับ</Badge>}
-                </p>
-                <p className="text-xs text-slate-400">
-                  เข้าร่วม {new Date(u.created_at).toLocaleDateString('th-TH')}
-                </p>
+            <Card key={u.id} className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-1.5 truncate font-bold text-slate-800">
+                    {u.username}
+                    {u.suspended && <Badge color="red">ถูกระงับ</Badge>}
+                    {u.exclude_stats && <Badge color="slate">🚫📊 ไม่นับสถิติ</Badge>}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    เข้าร่วม {new Date(u.created_at).toLocaleDateString('th-TH')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => toggleSuspend(u)}
+                  className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                    u.suspended
+                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                      : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
+                  }`}
+                >
+                  {u.suspended ? 'ปลดระงับ' : '🚫 ระงับ'}
+                </button>
               </div>
               <button
-                onClick={() => toggleSuspend(u)}
-                className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                  u.suspended
-                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                    : 'bg-rose-100 text-rose-600 hover:bg-rose-200'
+                onClick={() => toggleExclude(u)}
+                className={`w-full rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  u.exclude_stats
+                    ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}
               >
-                {u.suspended ? 'ปลดระงับ' : '🚫 ระงับ'}
+                {u.exclude_stats ? '📊 นับในสถิติอีกครั้ง' : '🚫 ไม่นับบัญชีนี้ในสถิติ/กราฟ'}
               </button>
             </Card>
           ))}
