@@ -1537,8 +1537,8 @@ export default function Admin() {
   const [dayNumber, setDayNumber] = useState(1)
   const [title, setTitle] = useState('')
   const [categoryList, setCategoryList] = useState([]) // หมวดที่ตั้งไว้ (สำหรับ dropdown)
-  const [publish, setPublish] = useState(true)
-  const [publishEdit, setPublishEdit] = useState(true) // สถานะเผยแพร่ของชุดที่กำลังแก้ไข
+  const [publish, setPublish] = useState(false) // ชุดใหม่ = ฉบับร่าง (ไม่ public) จนกว่าจะกดเผยแพร่เอง
+  const [publishEdit, setPublishEdit] = useState(false) // สถานะเผยแพร่ของชุดที่กำลังแก้ไข (โหลดจากชุดจริง)
   const [questions, setQuestions] = useState(() =>
     Array.from({ length: 5 }, blankQuestion)
   )
@@ -1787,6 +1787,7 @@ export default function Admin() {
         setMsg('✅ บันทึกชุดข้อสอบใหม่เรียบร้อย' + (publish ? ' และเผยแพร่แล้ว' : ' (ฉบับร่าง)'))
         setTitle('')
         setQuestions(Array.from({ length: 5 }, blankQuestion))
+        setPublish(false) // กลับเป็นฉบับร่างสำหรับชุดถัดไป
       } else {
         // บันทึกทั้งชุดในคราวเดียวแบบ atomic (upsert ตาม id — กดซ้ำก็ไม่เกิดข้อซ้ำ)
         const { data, error } = await supabase.rpc('save_exam_set', {
