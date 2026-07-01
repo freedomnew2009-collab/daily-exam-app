@@ -15,18 +15,6 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['pwa-icon.svg'],
-      workbox: {
-        // ไม่ precache ก้อน 3D (three.js ~860KB) — โหลดตอนเข้าหน้าสวนแล้วค่อยแคชเอง
-        // ทำให้ติดตั้งแอปครั้งแรกเบา ไม่ต้องดาวน์โหลดก้อนใหญ่ทันที
-        globIgnores: ['**/Tree3D-*.js'],
-        runtimeCaching: [
-          {
-            urlPattern: /\/assets\/Tree3D-.*\.js$/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'tree3d-chunk', expiration: { maxEntries: 3 } },
-          },
-        ],
-      },
       manifest: {
         name: 'Audi Exam — ติวข้อสอบ Audiology',
         short_name: 'Audi Exam',

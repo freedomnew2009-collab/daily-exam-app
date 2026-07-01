@@ -99,3 +99,17 @@ body {
 .animate-wiggle {
   animation: wiggle 0.6s ease-in-out;
 }
+
+/* ต้นไม้โยกซ้ายขวาเบา ๆ เหมือนลมพัด */
+@keyframes treeSway {
+  0%,
+  100% {
+    transform: rotate(-2.4deg);
+  }
+  50% {
+    transform: rotate(2.4deg);
+  }
+}
+.tree-sway {
+  animation: treeSway 3.8s ease-in-out infinite;
+}

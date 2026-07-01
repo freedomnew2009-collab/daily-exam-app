@@ -1,12 +1,12 @@
-import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { compressImage } from '../lib/image'
 import { Button, Card, Badge, Spinner, AutoTextarea, BigTextField, formatDuration } from '../components/ui'
 import { Q_TYPES, fillAccepts } from '../lib/questions'
+import TreeSprite from '../components/TreeSprite'
 
-const Tree3D = lazy(() => import('../components/Tree3D'))
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 // แอดมินดูรูปต้นไม้ทุกระดับ (ที่ผู้ใช้ต้องปลดล็อก)
@@ -18,9 +18,9 @@ function TreeLevelsPreview() {
         เลื่อนดูรูปต้นไม้ทุกระดับ — ผู้ใช้จะเห็นเป็นเงาดำจนกว่าจะปลดล็อก (รดน้ำให้ถึงเลเวลนั้น)
       </p>
       <div className="relative h-64 overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-b from-sky-200 via-sky-100 to-emerald-50">
-        <Suspense fallback={<div className="flex h-full items-center justify-center text-5xl">🌳</div>}>
-          <Tree3D level={lv} />
-        </Suspense>
+        <div className="flex h-full items-end justify-center pb-2">
+          <TreeSprite level={lv} className="h-[95%]" />
+        </div>
         <span className="absolute left-3 top-3 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-emerald-700 shadow">
           เลเวล {lv}
         </span>

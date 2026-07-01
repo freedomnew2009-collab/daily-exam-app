@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { supabase, isConfigured } from '../lib/supabase'
 import { Spinner, Button } from '../components/ui'
 import { playFinishSound } from '../lib/sound'
 
-const Tree3D = lazy(() => import('../components/Tree3D'))
+import TreeSprite from '../components/TreeSprite'
 
 const LEVEL_NAMES = [
   'เมล็ดพันธุ์', 'ต้นกล้า', 'ต้นอ่อน', 'ต้นเล็ก', 'ต้นโต',
@@ -16,8 +16,6 @@ const LEVEL_NAMES = [
 const levelName = (lv) => LEVEL_NAMES[Math.min(lv - 1, LEVEL_NAMES.length - 1)]
 
 const MAX_TREE_LEVEL = 20 // จำนวนฟอร์มต้นไม้ในคอลเลกชัน
-const levelEmoji = (lv) =>
-  lv <= 2 ? '🌱' : lv <= 4 ? '🌿' : lv <= 6 ? '🪴' : lv <= 9 ? '🌸' : lv <= 12 ? '🍎' : lv <= 16 ? '🌳' : '🌟'
 
 // แคตตาล็อก Achievement — คำนวณจาก get_game_stats
 const ACHIEVEMENTS = [
@@ -96,21 +94,14 @@ export default function Garden() {
         </div>
       </header>
 
-      {/* เวที 3D */}
+      {/* เวทีต้นไม้ */}
       <div className="animate-pop relative h-72 overflow-hidden rounded-3xl border border-emerald-100 bg-gradient-to-b from-sky-200 via-sky-100 to-emerald-50 shadow-inner">
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center text-6xl">🌳</div>
-          }
-        >
-          <Tree3D level={displayLevel} />
-        </Suspense>
+        <div className="flex h-full items-end justify-center pb-2">
+          <TreeSprite level={displayLevel} className="h-[95%]" />
+        </div>
         <span className="absolute left-3 top-3 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-emerald-700 shadow">
           {levelName(displayLevel)}
           {preview && preview !== lv && <span className="text-slate-400"> · พรีวิว Lv{preview}</span>}
-        </span>
-        <span className="absolute bottom-3 right-3 rounded-full bg-white/70 px-2 py-1 text-[10px] font-semibold text-slate-500 shadow">
-          🔄 ต้นไม้หมุนได้
         </span>
         {preview && preview !== lv && (
           <button
@@ -150,8 +141,8 @@ export default function Garden() {
               >
                 {unlocked ? (
                   <>
-                    <span className="text-2xl">{levelEmoji(tl)}</span>
-                    <span className="mt-0.5 text-[10px] font-bold text-emerald-600">Lv {tl}</span>
+                    <TreeSprite level={tl} className="h-[78%]" />
+                    <span className="absolute bottom-0.5 text-[10px] font-bold text-emerald-600">Lv {tl}</span>
                   </>
                 ) : (
                   <>
