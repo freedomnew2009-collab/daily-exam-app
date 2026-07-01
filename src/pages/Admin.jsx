@@ -1239,8 +1239,13 @@ function ArticlesAdmin() {
   const [images, setImages] = useState([])
   const [published, setPublished] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [inlineUploading, setInlineUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const caretRef = useRef(body.length) // ตำแหน่งเคอร์เซอร์ล่าสุดในช่องเนื้อหา
+  const [viewersFor, setViewersFor] = useState(null) // article id ที่กำลังดูผู้เข้าชม
+  const [viewers, setViewers] = useState([])
+  const [viewersLoading, setViewersLoading] = useState(false)
 
   const [stats, setStats] = useState({})
   const load = useCallback(async () => {
@@ -1313,6 +1318,51 @@ function ArticlesAdmin() {
 
   const removeImage = (url) => setImages((prev) => prev.filter((u) => u !== url))
 
+  // แทรกรูปในเนื้อหา ณ ตำแหน่งเคอร์เซอร์ (เก็บเป็นโทเคน [[img:URL]])
+  const onInsertInline = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !file.type.startsWith('image/')) return
+    if (file.size > 5 * 1024 * 1024) {
+      setMsg('⚠️ รูปต้องไม่เกิน 5MB')
+      return
+    }
+    setInlineUploading(true)
+    setMsg('')
+    try {
+      const up = await compressImage(file)
+      const ext = (up.name.split('.').pop() || 'jpg').toLowerCase()
+      const path = `articles/${crypto.randomUUID()}.${ext}`
+      const { error } = await supabase.storage
+        .from('question-images')
+        .upload(path, up, { contentType: up.type, upsert: false })
+      if (error) throw error
+      const { data } = supabase.storage.from('question-images').getPublicUrl(path)
+      const token = `\n[[img:${data.publicUrl}]]\n`
+      const pos = Math.min(caretRef.current ?? body.length, body.length)
+      const next = body.slice(0, pos) + token + body.slice(pos)
+      setBody(next)
+      caretRef.current = pos + token.length
+    } catch (err) {
+      setMsg('❌ แทรกรูปไม่สำเร็จ: ' + (err.message || ''))
+    } finally {
+      setInlineUploading(false)
+    }
+  }
+
+  const toggleViewers = async (a) => {
+    if (viewersFor === a.id) {
+      setViewersFor(null)
+      return
+    }
+    setViewersFor(a.id)
+    setViewers([])
+    setViewersLoading(true)
+    const { data } = await supabase.rpc('get_article_viewers', { p_article_id: a.id })
+    setViewers(Array.isArray(data) ? data : [])
+    setViewersLoading(false)
+  }
+
   const save = async () => {
     if (!title.trim() || !body.trim()) {
       setMsg('⚠️ ใส่หัวข้อและเนื้อหาก่อน')
@@ -1372,11 +1422,24 @@ function ArticlesAdmin() {
         />
         <AutoTextarea
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value)
+            caretRef.current = e.target.selectionStart
+          }}
+          onSelect={(e) => {
+            caretRef.current = e.target.selectionStart
+          }}
           minRows={8}
-          placeholder="เนื้อหาบทความ… (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
+          placeholder="เนื้อหาบทความ… (ขึ้นบรรทัดใหม่ได้ตามต้องการ · แทรกรูประหว่างข้อความได้)"
           className="w-full resize-none rounded-xl border-2 border-violet-100 bg-white p-2.5 text-[15px] leading-relaxed text-slate-800 outline-none transition focus:border-violet-400"
         />
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-200 py-2.5 text-sm font-semibold text-emerald-600 hover:bg-emerald-50">
+          {inlineUploading ? '⏳ กำลังแทรกรูป…' : '🖼️ แทรกรูปในเนื้อหา (ตรงตำแหน่งเคอร์เซอร์)'}
+          <input type="file" accept="image/*" onChange={onInsertInline} disabled={inlineUploading} className="hidden" />
+        </label>
+        <p className="text-xs text-slate-400">
+          💡 กดตรงตำแหน่งในเนื้อหาที่อยากวางรูป แล้วกด "แทรกรูปในเนื้อหา" — รูปจะแทรกตรงนั้นเวลาผู้ใช้อ่าน
+        </p>
 
         {/* รูปประกอบ (ใส่ได้หลายรูป — รูปแรกเป็นปก) */}
         {images.length > 0 && (
@@ -1401,7 +1464,7 @@ function ArticlesAdmin() {
           </div>
         )}
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-violet-200 py-3 text-sm font-semibold text-violet-500 hover:bg-violet-50">
-          {uploading ? '⏳ กำลังอัปโหลด…' : images.length ? '➕ เพิ่มรูปอีก' : '🖼️ เพิ่มรูปประกอบ (เลือกได้หลายรูป)'}
+          {uploading ? '⏳ กำลังอัปโหลด…' : images.length ? '➕ เพิ่มรูปปก/แกลเลอรีอีก' : '🖼️ เพิ่มรูปปก/แกลเลอรี (รูปแรก = ปก)'}
           <input
             type="file"
             accept="image/*"
@@ -1448,38 +1511,70 @@ function ArticlesAdmin() {
       ) : (
         <div className="mt-3 space-y-2">
           {list.map((a) => (
-            <Card key={a.id} className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate font-bold text-slate-800">{a.title}</p>
-                <p className="text-xs text-slate-400">
-                  {a.published ? (
-                    <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
+            <Card key={a.id} className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-slate-800">{a.title}</p>
+                  <p className="text-xs text-slate-400">
+                    {a.published ? (
+                      <span className="font-semibold text-emerald-600">เผยแพร่แล้ว</span>
+                    ) : (
+                      <span className="font-semibold text-amber-600">ฉบับร่าง</span>
+                    )}{' '}
+                    · 👤 {stats[a.id]?.viewers ?? 0} คน · ⭐ {stats[a.id]?.stars ?? 0} · {new Date(a.created_at).toLocaleDateString('th-TH')}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 gap-1">
+                  <button
+                    onClick={() => startEdit(a)}
+                    className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
+                  >
+                    แก้ไข
+                  </button>
+                  <button
+                    onClick={() => togglePublish(a)}
+                    className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
+                  >
+                    {a.published ? 'ซ่อน' : 'เผยแพร่'}
+                  </button>
+                  <button
+                    onClick={() => remove(a)}
+                    className="rounded-lg bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-200"
+                  >
+                    ลบ
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => toggleViewers(a)}
+                className="w-full rounded-lg bg-sky-50 px-2 py-1.5 text-xs font-semibold text-sky-600 hover:bg-sky-100"
+              >
+                {viewersFor === a.id ? '▲ ซ่อนผู้เข้าชม' : `👁 ดูผู้เข้าชม (${stats[a.id]?.viewers ?? 0} คน)`}
+              </button>
+              {viewersFor === a.id && (
+                <div className="rounded-xl bg-slate-50 p-2">
+                  {viewersLoading ? (
+                    <p className="py-1 text-center text-xs text-slate-400">กำลังโหลด…</p>
+                  ) : viewers.length === 0 ? (
+                    <p className="py-1 text-center text-xs text-slate-400">ยังไม่มีใครเข้าอ่าน</p>
                   ) : (
-                    <span className="font-semibold text-amber-600">ฉบับร่าง</span>
-                  )}{' '}
-                  · 👤 {stats[a.id]?.viewers ?? 0} คน · ⭐ {stats[a.id]?.stars ?? 0} · {new Date(a.created_at).toLocaleDateString('th-TH')}
-                </p>
-              </div>
-              <div className="flex flex-shrink-0 gap-1">
-                <button
-                  onClick={() => startEdit(a)}
-                  className="rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-200"
-                >
-                  แก้ไข
-                </button>
-                <button
-                  onClick={() => togglePublish(a)}
-                  className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
-                >
-                  {a.published ? 'ซ่อน' : 'เผยแพร่'}
-                </button>
-                <button
-                  onClick={() => remove(a)}
-                  className="rounded-lg bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-200"
-                >
-                  ลบ
-                </button>
-              </div>
+                    <div className="max-h-52 space-y-1 overflow-y-auto">
+                      {viewers.map((v, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs">
+                          <span className="min-w-0 truncate font-semibold text-slate-700">
+                            {v.read ? '⭐ ' : '👤 '}
+                            {v.username}
+                          </span>
+                          <span className="flex-shrink-0 text-slate-400">
+                            {new Date(v.viewed_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-1 text-center text-[10px] text-slate-400">⭐ = อ่านจบแล้ว · 👤 = เข้าดู</p>
+                </div>
+              )}
             </Card>
           ))}
         </div>
@@ -1523,6 +1618,11 @@ export default function Admin() {
     else if (drawerOpen && dx < -60) setDrawerOpen(false)
   }
   const goSection = (secId) => {
+    // เตือนถ้ากำลังแก้ข้อสอบค้างไว้แล้วจะออกไปหน้าอื่น
+    if (dirty && section === 'exams' && secId !== 'exams') {
+      if (!confirm('ยังไม่ได้บันทึกข้อสอบ — ต้องการออกโดยไม่บันทึกใช่ไหม?')) return
+      setDirty(false)
+    }
     setSection(secId)
     setDrawerOpen(false)
     window.scrollTo({ top: 0 })
@@ -1545,7 +1645,20 @@ export default function Admin() {
   const [saving, setSaving] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [dirty, setDirty] = useState(false) // มีการแก้ไขข้อสอบที่ยังไม่บันทึก
   const formRef = useRef(null)
+
+  // เตือนตอนปิด/รีเฟรชหน้าเว็บ ถ้ายังไม่บันทึก
+  useEffect(() => {
+    const h = (e) => {
+      if (dirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
 
   const isNewSet = targetSetId === ''
 
@@ -1605,6 +1718,7 @@ export default function Admin() {
     if (setId === '') {
       setTitle('')
       setQuestions(Array.from({ length: 5 }, blankQuestion))
+      setDirty(false)
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
@@ -1618,9 +1732,11 @@ export default function Admin() {
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     const loaded = await loadSetQuestions(setId)
     setQuestions(loaded.length ? loaded : [blankQuestion()])
+    setDirty(false)
     setFormLoading(false)
   }
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const load = useCallback(async () => {
     setLoading(true)
     const [{ data: setsData }, { count }, { data: usersData }, { data: catSetting }] =
@@ -1691,7 +1807,10 @@ export default function Admin() {
   if (!isAdmin) return <AdminLogin />
   if (loading) return <Spinner />
 
-  const updateQ = (i, val) => setQuestions((qs) => qs.map((q, qi) => (qi === i ? val : q)))
+  const updateQ = (i, val) => {
+    setDirty(true)
+    setQuestions((qs) => qs.map((q, qi) => (qi === i ? val : q)))
+  }
   const removeQ = async (i) => {
     const q = questions[i]
     if (q.id) {
@@ -1702,9 +1821,13 @@ export default function Admin() {
         return
       }
     }
+    setDirty(true)
     setQuestions((qs) => qs.filter((_, qi) => qi !== i))
   }
-  const addQ = () => setQuestions((qs) => [...qs, blankQuestion()])
+  const addQ = () => {
+    setDirty(true)
+    setQuestions((qs) => [...qs, blankQuestion()])
+  }
 
   // ข้อที่ยังไม่ได้กรอกอะไรเลย -> ข้ามไป (ไม่ต้องครบ 5 ข้อ)
   const isBlankQuestion = (q) => {
@@ -1806,6 +1929,7 @@ export default function Admin() {
         const reloaded = await loadSetQuestions(targetSetId)
         if (reloaded.length) setQuestions(reloaded)
       }
+      setDirty(false)
       await load()
     } catch (e) {
       setMsg('❌ ' + (e.message || 'บันทึกไม่สำเร็จ'))
@@ -1905,7 +2029,10 @@ export default function Admin() {
           <label className="text-xs font-medium text-slate-500">ชื่อชุดข้อสอบ</label>
           <input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              setDirty(true)
+            }}
             placeholder="เช่น ข้อสอบบทที่ 1, แนวข้อสอบกลางภาค…"
             className="w-full rounded-xl border-2 border-violet-100 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-violet-400"
           />

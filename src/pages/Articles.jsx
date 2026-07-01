@@ -220,8 +220,29 @@ export function ArticleView() {
       </div>
       <h1 className="mt-1 text-2xl font-extrabold leading-snug text-slate-800">{article.title}</h1>
 
-      <div className="mt-4 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700">
-        {article.body}
+      <div className="mt-4 space-y-2 text-[15px] leading-relaxed text-slate-700">
+        {String(article.body || '')
+          .split(/\[\[img:(.*?)\]\]/g)
+          .map((seg, i) => {
+            if (!seg) return null
+            if (i % 2 === 1) {
+              return (
+                <a key={i} href={seg} target="_blank" rel="noreferrer" className="block">
+                  <img
+                    src={seg}
+                    alt="รูปประกอบบทความ"
+                    className="my-3 w-full rounded-2xl border border-violet-100 object-contain shadow-sm"
+                    loading="lazy"
+                  />
+                </a>
+              )
+            }
+            return (
+              <p key={i} className="whitespace-pre-wrap">
+                {seg}
+              </p>
+            )
+          })}
       </div>
 
       {/* รูปประกอบเพิ่มเติม */}
